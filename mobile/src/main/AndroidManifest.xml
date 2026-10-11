@@ -26,6 +26,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".AppSettingsActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".RunHistoryActivity"
             android:exported="false" />
 

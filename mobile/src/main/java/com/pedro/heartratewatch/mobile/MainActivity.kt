@@ -104,7 +104,6 @@ class MainActivity : ComponentActivity() {
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
     private val alertPlayer by lazy { AlertPlayer(applicationContext) }
     private val calibrationRepository by lazy { CalibrationRepository(applicationContext) }
-    private val themePreferenceRepository by lazy { ThemePreferenceRepository(applicationContext) }
     private val runHistoryRepository by lazy { RunHistoryRepository(applicationContext) }
 
     // Live-only (registered while this Activity is actually open), not manifest-declared --
@@ -128,7 +127,6 @@ class MainActivity : ComponentActivity() {
                     settingsRepository,
                     alertPlayer,
                     calibrationRepository,
-                    themePreferenceRepository,
                     runHistoryRepository
                 )
             }
@@ -146,7 +144,6 @@ private fun SettingsScreen(
     repository: SettingsRepository,
     alertPlayer: AlertPlayer,
     calibrationRepository: CalibrationRepository,
-    themePreferenceRepository: ThemePreferenceRepository,
     runHistoryRepository: RunHistoryRepository
 ) {
     val context = LocalContext.current
@@ -182,10 +179,6 @@ private fun SettingsScreen(
     // per type (rather than the six near-identical named vals this used to be) is safe -- same
     // reasoning as ExercisePickerActivity's ActivityType.entries.forEach.
     val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
-
-    // Its own separate store (see ThemePreferenceRepository), so this writes through immediately
-    // on toggle rather than going through draft/Save like the rest of this screen.
-    val useLightTheme by themePreferenceRepository.useLightThemeFlow.collectAsStateWithLifecycle(initialValue = false)
 
     // Settings itself starts collapsed (see the "Settings" header below); which single accordion
     // is open inside it is tracked here rather than by each AccordionSection independently, so
@@ -251,9 +244,6 @@ private fun SettingsScreen(
                 expanded = expandedInnerSection == "General",
                 onToggle = { expandedInnerSection = if (expandedInnerSection == "General") null else "General" }
             ) {
-                SwitchRow("Light theme", useLightTheme) {
-                    scope.launch { themePreferenceRepository.setUseLightTheme(it) }
-                }
                 NumberFieldWithInfo(
                     "Break length (seconds)",
                     draft.breakTimerSeconds,
