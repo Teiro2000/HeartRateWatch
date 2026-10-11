@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -110,6 +111,10 @@ private fun HomeScreen() {
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val allStarts = runs.map { it.startedAtMillis } + workouts.map { it.startedAtMillis }
     val streak = streakDays(allStarts)
+    // Re-arm the daily reminder alarm whenever the app opens (it's cleared if the app was force-stopped).
+    LaunchedEffect(Unit) {
+        StreakReminder.schedule(context.applicationContext, StreakReminderRepository(context.applicationContext).current())
+    }
     val last = allStarts.maxOrNull()?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) } ?: "--"
     Scaffold { innerPadding ->
         Column(
