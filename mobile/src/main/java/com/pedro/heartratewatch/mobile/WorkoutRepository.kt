@@ -147,6 +147,10 @@ class WorkoutRepository(private val context: Context) {
         }
     }
 
+    suspend fun deleteAllWorkouts() {
+        context.workoutDataStore.edit { prefs -> prefs[Keys.HISTORY] = workoutsToJson(emptyList()) }
+    }
+
     companion object {
         fun newId(): String = UUID.randomUUID().toString()
     }
