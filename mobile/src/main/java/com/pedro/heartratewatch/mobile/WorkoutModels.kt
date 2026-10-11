@@ -58,6 +58,19 @@ data class WorkoutLog(
 fun String.capitalizedWords(): String =
     trim().replace(Regex("""(^|[\s-])(\p{Ll})""")) { it.groupValues[1] + it.groupValues[2].uppercase() }
 
+/** Exercises that no finished workout, template or workout in progress refers to. */
+fun unusedExercises(
+    exercises: List<Exercise>,
+    history: List<WorkoutLog>,
+    templates: List<WorkoutTemplate>,
+    active: WorkoutLog?
+): List<Exercise> {
+    val used = HashSet<String>()
+    (history + listOfNotNull(active)).forEach { w -> w.exercises.forEach { used += it.exerciseId } }
+    templates.forEach { used += it.exerciseIds }
+    return exercises.filter { it.id !in used }
+}
+
 /** Starting set of exercises, so the database isn't empty on first launch. */
 val DEFAULT_EXERCISES: List<Exercise> = listOf(
     "Squat", "Deadlift", "Bench Press", "Overhead Press", "Barbell Row", "Chin-Up",
