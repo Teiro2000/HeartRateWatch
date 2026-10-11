@@ -90,27 +90,38 @@ class HeartRateTileService : TileService() {
         // than a frozen "-- bpm / -- /km / 0.00 km". The watch has no run history of its own, only
         // whatever the phone last pushed to DashboardStatsStore (see SettingsSyncListenerService).
         val middleContent = if (state.isActive) {
+            val bpm = state.currentBpm
+            val bpmStatus = heartRateStatus(bpm, settings, maxHrBpm)
             val readouts = LayoutElementBuilders.Column.Builder()
-                .addContent(
-                    readoutText(
-                        state.currentBpm?.let { "$it bpm" } ?: "-- bpm",
-                        heartRateStatus(state.currentBpm, settings, maxHrBpm)
-                    )
-                )
+                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+                .addContent(bigValue(statusArrow(bpmStatus) + (bpm?.toString() ?: "--"), statusColor(bpmStatus)))
+                .addContent(smallLabel("bpm"))
             if (isRun) {
-                readouts
-                    .addContent(
-                        readoutText(
-                            state.currentPaceSecPerKm?.let { formatPace(it, settings.paceUnit) }
-                                ?: "-- /${settings.paceUnit.symbol}",
-                            paceStatus(state.currentPaceSecPerKm, settings)
+                val paceSec = state.currentPaceSecPerKm
+                val paceStatus = paceStatus(paceSec, settings)
+                readouts.addContent(spacer(6f))
+                readouts.addContent(
+                    LayoutElementBuilders.Row.Builder()
+                        .setWidth(expand())
+                        .addContent(
+                            readoutColumn(
+                                statusArrow(paceStatus) + (paceSec?.let { formatPace(it, settings.paceUnit).substringBefore(" /") } ?: "--"),
+                                statusColor(paceStatus),
+                                "pace /${settings.paceUnit.symbol}"
+                            )
                         )
-                    )
-                    .addContent(
-                        readoutText(formatDistance(state.distanceMeters, settings.distanceUnit), status = null)
-                    )
+                        .addContent(
+                            readoutColumn(
+                                formatDistance(state.distanceMeters, settings.distanceUnit).substringBefore(" "),
+                                COLOR_NEUTRAL,
+                                settings.distanceUnit.symbol
+                            )
+                        )
+                        .build()
+                )
             } else {
-                readouts.addContent(readoutText("Stationary bike", status = null))
+                readouts.addContent(spacer(4f))
+                readouts.addContent(smallLabel("Stationary bike"))
             }
             readouts.build()
         } else {
@@ -242,25 +253,60 @@ class HeartRateTileService : TileService() {
             .build()
     }
 
-    /** One bpm/pace/distance line -- all the same size so nothing looks accidentally more important. */
-    private fun readoutText(value: String, status: EffortStatus?): LayoutElementBuilders.Text {
-        val color = when (status) {
-            EffortStatus.GOOD -> COLOR_GOOD
-            EffortStatus.TOO_HIGH, EffortStatus.TOO_LOW -> COLOR_BAD
-            null -> COLOR_NEUTRAL
-        }
-        val arrow = when (status) {
-            EffortStatus.TOO_HIGH -> "▲ "
-            EffortStatus.TOO_LOW -> "▼ "
-            else -> ""
-        }
-        return LayoutElementBuilders.Text.Builder()
-            .setText(arrow + value)
+    private fun statusColor(status: EffortStatus?): Int = when (status) {
+        EffortStatus.GOOD -> COLOR_GOOD
+        EffortStatus.TOO_HIGH, EffortStatus.TOO_LOW -> COLOR_BAD
+        null -> COLOR_NEUTRAL
+    }
+
+    private fun statusArrow(status: EffortStatus?): String = when (status) {
+        EffortStatus.TOO_HIGH -> "▲ "
+        EffortStatus.TOO_LOW -> "▼ "
+        else -> ""
+    }
+
+    /** The large heart rate number. */
+    private fun bigValue(text: String, color: Int): LayoutElementBuilders.Text =
+        LayoutElementBuilders.Text.Builder()
+            .setText(text)
             .setFontStyle(
-                LayoutElementBuilders.FontStyle.Builder().setSize(sp(READOUT_SIZE_SP)).setColor(argb(color)).build()
+                LayoutElementBuilders.FontStyle.Builder()
+                    .setSize(sp(BIG_SIZE_SP)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
             )
             .build()
-    }
+
+    /** A small caption under a number ("bpm", "pace /mi"). */
+    private fun smallLabel(text: String, sizeSp: Float = LABEL_SIZE_SP): LayoutElementBuilders.Text =
+        LayoutElementBuilders.Text.Builder()
+            .setText(text)
+            .setFontStyle(LayoutElementBuilders.FontStyle.Builder().setSize(sp(sizeSp)).setColor(argb(COLOR_GOOD)).build())
+            .build()
+
+    private fun spacer(heightDp: Float): LayoutElementBuilders.Spacer =
+        LayoutElementBuilders.Spacer.Builder().setHeight(dp(heightDp)).build()
+
+    /** A medium bold number with its caption underneath -- pace, distance, and the idle stats. */
+    private fun readoutColumn(
+        value: String,
+        color: Int,
+        label: String,
+        valueSizeSp: Float = MEDIUM_SIZE_SP,
+        labelSizeSp: Float = LABEL_SIZE_SP
+    ): LayoutElementBuilders.Column =
+        LayoutElementBuilders.Column.Builder()
+            .setWidth(weight(1f))
+            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
+            .addContent(
+                LayoutElementBuilders.Text.Builder()
+                    .setText(value)
+                    .setFontStyle(
+                        LayoutElementBuilders.FontStyle.Builder()
+                            .setSize(sp(valueSizeSp)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
+                    )
+                    .build()
+            )
+            .addContent(smallLabel(label, labelSizeSp))
+            .build()
 
     /** Idle-state row: streak / this month / last workout, matching the phone home screen's own
      * DashboardStatsRow -- three narrow columns fit better on the round face than the wider text
@@ -284,32 +330,16 @@ class HeartRateTileService : TileService() {
     }
 
     private fun statColumn(value: String, label: String): LayoutElementBuilders.Column =
-        LayoutElementBuilders.Column.Builder()
-            .setWidth(weight(1f))
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .addContent(
-                LayoutElementBuilders.Text.Builder()
-                    .setText(value)
-                    .setFontStyle(
-                        LayoutElementBuilders.FontStyle.Builder().setSize(sp(13f)).setColor(argb(COLOR_NEUTRAL)).build()
-                    )
-                    .build()
-            )
-            .addContent(
-                LayoutElementBuilders.Text.Builder()
-                    .setText(label)
-                    .setFontStyle(
-                        LayoutElementBuilders.FontStyle.Builder().setSize(sp(9f)).setColor(argb(COLOR_GOOD)).build()
-                    )
-                    .build()
-            )
-            .build()
+        // Three narrow columns on a round face: smaller than the live readouts, same look.
+        readoutColumn(value, COLOR_NEUTRAL, label, valueSizeSp = 15f, labelSizeSp = 9f)
 
     private companion object {
         // Bump whenever the layout changes -- resources (not the live data) are cached by
         // version, and this is what invalidates that cache.
-        const val RESOURCES_VERSION = "5"
-        const val READOUT_SIZE_SP = 18f
+        const val RESOURCES_VERSION = "6"
+        const val BIG_SIZE_SP = 38f
+        const val MEDIUM_SIZE_SP = 20f
+        const val LABEL_SIZE_SP = 11f
         // Pip-Boy palette -- matches PulseGuardTheme/PipBoyTheme's green-on-black CRT look.
         // COLOR_NEUTRAL used to be plain white; a saturated blue for "Change mode" (still used by
         // ExercisePickerActivity's own Compose screen, which just follows PulseGuardTheme like
