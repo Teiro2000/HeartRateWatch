@@ -180,13 +180,17 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
             if (points.isEmpty()) {
                 Text("No workouts for this exercise in that range.")
             } else {
-                ProgressChart(
-                    points = points,
-                    show1rm = show1rm,
-                    showTop = showTop,
-                    unit = unit,
+                val dateFormat = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+                LineChart(
+                    xMillis = points.map { it.millis },
+                    series = buildList {
+                        if (showTop) add(LineSeries(MaterialTheme.colorScheme.tertiary, points.map { unit.fromLb(it.topWeightLb) }, points.map { it.topWeightPr }))
+                        if (show1rm) add(LineSeries(MaterialTheme.colorScheme.primary, points.map { unit.fromLb(it.e1rmLb) }, points.map { it.e1rmPr }))
+                    },
                     selected = selectedPoint?.takeIf { it in points.indices },
-                    onSelect = { selectedPoint = it }
+                    onSelect = { selectedPoint = it },
+                    xLabel = { dateFormat.format(Date(it)) },
+                    yLabel = { formatWeight(it) }
                 )
             }
         }
@@ -251,122 +255,11 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
 }
 
 @Composable
-private fun LegendDot(color: Color, label: String) {
+internal fun LegendDot(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Canvas(modifier = Modifier.size(10.dp)) {
             drawCircle(color, radius = 5.dp.toPx(), center = Offset(5.dp.toPx(), 5.dp.toPx()))
         }
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
-}
-
-private const val LEFT_PAD_DP = 44f
-private const val RIGHT_PAD_DP = 12f
-private const val TOP_PAD_DP = 12f
-private const val BOTTOM_PAD_DP = 24f
-
-@Composable
-private fun ProgressChart(
-    points: List<ProgressPoint>,
-    show1rm: Boolean,
-    showTop: Boolean,
-    unit: WeightUnit,
-    selected: Int?,
-    onSelect: (Int?) -> Unit
-) {
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    val measurer = rememberTextMeasurer()
-    val e1rmColor = MaterialTheme.colorScheme.primary
-    val topColor = MaterialTheme.colorScheme.tertiary
-    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val highlight = MaterialTheme.colorScheme.onSurface
-    val density = androidx.compose.ui.platform.LocalDensity.current.density
-
-    val e1rmValues = points.map { unit.fromLb(it.e1rmLb) }
-    val topValues = points.map { unit.fromLb(it.topWeightLb) }
-    val shown = buildList {
-        if (show1rm) addAll(e1rmValues)
-        if (showTop) addAll(topValues)
-    }
-    var yMin = shown.min()
-    var yMax = shown.max()
-    if (yMax - yMin < 1e-6) { yMin -= 1.0; yMax += 1.0 }
-    val yPad = (yMax - yMin) * 0.1
-    yMin -= yPad
-    yMax += yPad
-
-    fun xs(): List<Float> {
-        val left = LEFT_PAD_DP * density
-        val width = size.width - left - RIGHT_PAD_DP * density
-        val tMin = points.first().millis
-        val span = points.last().millis - tMin
-        return points.map { if (span == 0L) left + width / 2 else left + width * ((it.millis - tMin).toFloat() / span) }
-    }
-
-    fun yOf(value: Double): Float {
-        val top = TOP_PAD_DP * density
-        val height = size.height - top - BOTTOM_PAD_DP * density
-        return top + height * (1f - ((value - yMin) / (yMax - yMin)).toFloat())
-    }
-
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(240.dp)
-            .onSizeChanged { size = it }
-            .pointerInput(points, show1rm, showTop, size) {
-                detectTapGestures { tap ->
-                    val positions = xs()
-                    val nearest = positions.indices.minByOrNull { abs(positions[it] - tap.x) }
-                    // Anywhere within ~40dp of a point's column picks it; tapping empty space
-                    // elsewhere clears the selection.
-                    onSelect(nearest?.takeIf { abs(positions[it] - tap.x) <= 40 * density })
-                }
-            }
-    ) {
-        if (size == IntSize.Zero) return@Canvas
-        val positions = xs()
-        val left = LEFT_PAD_DP * density
-        val bottom = size.height - BOTTOM_PAD_DP * density
-
-        drawLine(axisColor.copy(alpha = 0.5f), Offset(left, TOP_PAD_DP * density), Offset(left, bottom), 1f)
-        drawLine(axisColor.copy(alpha = 0.5f), Offset(left, bottom), Offset(size.width - RIGHT_PAD_DP * density, bottom), 1f)
-
-        fun label(text: String, x: Float, y: Float) = drawAxisLabel(measurer, text, x, y, axisColor)
-        label(formatWeight(yMax), 2f, TOP_PAD_DP * density - 6f)
-        label(formatWeight(yMin), 2f, bottom - 14f)
-        val dateFormat = SimpleDateFormat("MMM d", Locale.getDefault())
-        label(dateFormat.format(Date(points.first().millis)), left, bottom + 4f)
-        if (points.size > 1) {
-            label(dateFormat.format(Date(points.last().millis)), size.width - RIGHT_PAD_DP * density - 40f, bottom + 4f)
-        }
-
-        fun series(values: List<Double>, prs: List<Boolean>, color: Color) {
-            if (points.size > 1) {
-                val path = Path()
-                positions.indices.forEach { i ->
-                    val point = Offset(positions[i], yOf(values[i]))
-                    if (i == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
-                }
-                drawPath(path, color, style = Stroke(width = 2.5f * density))
-            }
-            positions.indices.forEach { i ->
-                val center = Offset(positions[i], yOf(values[i]))
-                drawCircle(color, radius = 4f * density, center = center)
-                if (prs[i]) {
-                    drawCircle(color, radius = 8f * density, center = center, style = Stroke(width = 2f * density))
-                }
-            }
-        }
-        if (showTop) series(topValues, points.map { it.topWeightPr }, topColor)
-        if (show1rm) series(e1rmValues, points.map { it.e1rmPr }, e1rmColor)
-
-        selected?.let { i ->
-            drawLine(highlight.copy(alpha = 0.4f), Offset(positions[i], TOP_PAD_DP * density), Offset(positions[i], bottom), 1f * density)
-        }
-    }
-}
-
-private fun DrawScope.drawAxisLabel(measurer: TextMeasurer, text: String, x: Float, y: Float, color: Color) {
-    drawText(measurer, text, topLeft = Offset(x, y), style = TextStyle(fontSize = 10.sp, color = color))
 }
