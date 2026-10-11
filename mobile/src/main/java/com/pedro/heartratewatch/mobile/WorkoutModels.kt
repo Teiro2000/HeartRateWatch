@@ -58,6 +58,26 @@ data class WorkoutLog(
 fun String.capitalizedWords(): String =
     trim().replace(Regex("""(^|[\s-])(\p{Ll})""")) { it.groupValues[1] + it.groupValues[2].uppercase() }
 
+/**
+ * Total weight lifted in the calendar month containing [nowMillis], in lb: weight x reps summed over
+ * every set. Sets without a weight or reps count for nothing, and assisted (negative) weights are
+ * skipped since they aren't weight moved.
+ */
+fun monthlyVolumeLb(history: List<WorkoutLog>, nowMillis: Long = System.currentTimeMillis()): Double {
+    val month = java.time.YearMonth.from(java.time.Instant.ofEpochMilli(nowMillis).atZone(java.time.ZoneId.systemDefault()))
+    return history
+        .filter { java.time.YearMonth.from(java.time.Instant.ofEpochMilli(it.startedAtMillis).atZone(java.time.ZoneId.systemDefault())) == month }
+        .sumOf { workout ->
+            workout.exercises.sumOf { log ->
+                log.sets.sumOf { set ->
+                    val weight = set.weight ?: 0.0
+                    val reps = set.reps ?: 0
+                    if (weight > 0 && reps > 0) weight * reps else 0.0
+                }
+            }
+        }
+}
+
 /** Exercises that no finished workout, template or workout in progress refers to. */
 fun unusedExercises(
     exercises: List<Exercise>,

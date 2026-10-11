@@ -285,7 +285,10 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     onTemplates = { screen = Screen.Templates },
                     onExercises = { screen = Screen.Exercises },
                     onHistory = { screen = Screen.History },
-                    onProgress = { screen = Screen.Progress }
+                    onProgress = { screen = Screen.Progress },
+                    thisMonthVolume = formatVolume(unit.fromLb(monthlyVolumeLb(history)), unit),
+                    lastWorkout = history.maxOfOrNull { it.startedAtMillis }
+                        ?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) } ?: "--"
                 )
 
                 Screen.ChooseTemplate -> ChooseTemplateScreen(
@@ -436,11 +439,17 @@ private fun MenuScreen(
     onTemplates: () -> Unit,
     onExercises: () -> Unit,
     onHistory: () -> Unit,
-    onProgress: () -> Unit
+    onProgress: () -> Unit,
+    thisMonthVolume: String,
+    lastWorkout: String
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ScreenTitle("Workout")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            StatItem("Lifted this month", thisMonthVolume)
+            StatItem("Last workout", lastWorkout)
+        }
         if (active != null) {
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1271,6 +1280,10 @@ internal fun formatSet(set: LoggedSet, unit: WeightUnit): String =
  * rarely lands on a clean number. */
 internal fun formatWeight(weight: Double): String =
     String.format(Locale.US, "%.2f", weight).trimEnd('0').trimEnd('.')
+
+/** "48,250 lb" -- whole units with thousands separators. */
+private fun formatVolume(value: Double, unit: WeightUnit): String =
+    String.format(Locale.US, "%,.0f %s", value, unit.symbol)
 
 /**
  * Digits with at most one decimal point (a decimal comma counts as the point), and an optional
