@@ -56,6 +56,11 @@ class RunHistoryRepository(private val context: Context) {
         pushDashboardStatsToWatch()
     }
 
+    suspend fun removeAllRuns() {
+        context.runHistoryDataStore.edit { prefs -> prefs[Keys.HISTORY] = serialize(emptyList()) }
+        pushDashboardStatsToWatch()
+    }
+
     /** Sets a workout's distance -- used to fill in a stationary bike ride after the fact. */
     suspend fun updateDistance(startedAtMillis: Long, distanceMeters: Float) {
         context.runHistoryDataStore.edit { prefs ->
