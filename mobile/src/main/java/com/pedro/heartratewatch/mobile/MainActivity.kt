@@ -202,7 +202,7 @@ private fun SettingsScreen(
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            TextButton(onClick = { goToMainMenu(context) }) { Text("< Main menu") }
+            NavButtons(onBack = null, onMainMenu = { goToMainMenu(context) })
             Text(
                 "Pulse Guard",
                 style = MaterialTheme.typography.headlineSmall,
