@@ -186,6 +186,38 @@ private fun WorkoutApp(repository: WorkoutRepository) {
             }
         }
     }
+    var showImportHelp by remember { mutableStateOf(false) }
+    if (showImportHelp) {
+        AlertDialog(
+            onDismissRequest = { showImportHelp = false },
+            title = { Text("Import from Excel") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Use an .xlsx file with one row per set and a header row on top:")
+                    Text(
+                        "Workout | Date | Exercise | Set | Weight (lb) | Reps | Exercise note | Intensity | Workout note",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text("Required: Workout and Exercise. Everything else is optional, and columns can be in any order.")
+                    Text("• Workout: the workout's number. Rows with the same number are one workout.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Date: like 2025-03-14 or 2025-03-14 17:30 (or a real Excel date). If left out, workouts are spread one per day, ending today.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Exercise: the name. New names are added to your exercises.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Set, Reps: numbers. Rows for the same exercise are grouped into one exercise.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Weight: use the header \"Weight (kg)\" if the numbers are kg, otherwise they're lb. Use a negative weight for assisted exercises.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Intensity: Easy, OK or Hard.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Exercise note / Workout note: free text, on any row of that exercise or workout.", style = MaterialTheme.typography.bodySmall)
+                    Text("Tip: Export to Excel writes a file in this same format (plus a Workout ID column), so you can edit it and import it back. Re-importing the same workouts replaces them instead of duplicating.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showImportHelp = false; importPicker.launch(arrayOf("*/*")) }) { Text("Choose file") }
+            },
+            dismissButton = { TextButton(onClick = { showImportHelp = false }) { Text("Cancel") } }
+        )
+    }
     importPlan?.let { plan ->
         AlertDialog(
             onDismissRequest = { importPlan = null },
@@ -245,7 +277,7 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     onExercises = { screen = Screen.Exercises },
                     onHistory = { screen = Screen.History },
                     onProgress = { screen = Screen.Progress },
-                    onImport = { importPicker.launch(arrayOf("*/*")) },
+                    onImport = { showImportHelp = true },
                     onExport = {
                         if (history.isEmpty()) importMessage = "There are no finished workouts to export yet."
                         else exportPicker.launch("PulseGuard workouts.xlsx")
