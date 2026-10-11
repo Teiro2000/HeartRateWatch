@@ -54,6 +54,10 @@ data class WorkoutLog(
     val templateId: String? = null
 )
 
+/** "lat pulldown" -> "Lat Pulldown", "chin-up" -> "Chin-Up": every word (and hyphenated part) starts with a capital. */
+fun String.capitalizedWords(): String =
+    trim().replace(Regex("""(^|[\s-])(\p{Ll})""")) { it.groupValues[1] + it.groupValues[2].uppercase() }
+
 /** Starting set of exercises, so the database isn't empty on first launch. */
 val DEFAULT_EXERCISES: List<Exercise> = listOf(
     "Squat", "Deadlift", "Bench Press", "Overhead Press", "Barbell Row", "Chin-Up",

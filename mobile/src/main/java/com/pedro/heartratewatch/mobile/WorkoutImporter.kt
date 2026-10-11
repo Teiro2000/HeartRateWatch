@@ -71,7 +71,7 @@ object WorkoutImporter {
         val byName = existing.associateBy { it.name.trim().lowercase() }.toMutableMap()
         val created = mutableListOf<Exercise>()
         fun exerciseFor(name: String): Exercise = byName.getOrPut(name.trim().lowercase()) {
-            Exercise(id = WorkoutRepository.newId(), name = name.trim()).also { created += it }
+            Exercise(id = WorkoutRepository.newId(), name = name.capitalizedWords()).also { created += it }
         }
 
         // number -> rows, keeping the sheet's own order within a workout
@@ -110,7 +110,7 @@ object WorkoutImporter {
                     exerciseLogs += ExerciseLog(
                         id = "$workoutId-${exerciseLogs.size + 1}",
                         exerciseId = exercise.id,
-                        exerciseName = exercise.name
+                        exerciseName = exercise.name.capitalizedWords()
                     )
                 }
                 val current = exerciseLogs.last()
