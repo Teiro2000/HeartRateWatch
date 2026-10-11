@@ -33,7 +33,7 @@ import com.pedro.heartratewatch.shared.formatDistance
 import java.text.DateFormat
 import java.util.Date
 
-private data class LeaderboardEntry(val run: RunSummary, val seconds: Int, val isEstimate: Boolean)
+private data class LeaderboardEntry(val run: RunSummary, val seconds: Int)
 
 /** Standard distances shown (meters -> display label -> the RunSummary field holding its real split). */
 private val LEADERBOARD_DISTANCES = listOf(
@@ -44,12 +44,9 @@ private val LEADERBOARD_DISTANCES = listOf(
 private const val ENTRIES_PER_DISTANCE = 5
 
 /**
- * Best time at each standard distance. Prefers the real split ExerciseSessionService records
- * (bestSplitSeconds, a sliding window over the whole run's distance samples) -- falls back to
- * estimating from the run's *average* pace (avgPaceSecPerKm * distanceKm) only for runs recorded
- * before split-tracking existed, or ones where the real split is missing for some other reason
- * (e.g. GPS was off). Estimated entries are marked "(est.)" since they can be off from a true
- * split, e.g. a fast-starting run's real 5 km would be quicker than its whole-run average implies.
+ * Best time at each standard distance, from the real split ExerciseSessionService records
+ * (bestSplitSeconds, a sliding window over the whole run's distance samples). A run without a
+ * real split for a distance (it never covered that far, or has no distance samples) isn't listed.
  */
 class LeaderboardActivity : ComponentActivity() {
 
@@ -90,15 +87,10 @@ private fun LeaderboardScreen(repository: RunHistoryRepository, settingsReposito
         ) {
             NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
             Text("Leaderboard", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            Text(
-                "Real recorded splits where available; entries marked (est.) are approximated from " +
-                    "the run's average pace instead (older runs, or ones without full GPS data).",
-                style = MaterialTheme.typography.bodySmall
-            )
 
-            LEADERBOARD_DISTANCES.forEach { (targetMeters, label, splitField) ->
+            LEADERBOARD_DISTANCES.forEach { (_, label, splitField) ->
                 val entries = runs
-                    .mapNotNull { run -> leaderboardEntry(run, targetMeters, splitField) }
+                    .mapNotNull { run -> leaderboardEntry(run, splitField) }
                     .sortedBy { it.seconds }
                     .take(ENTRIES_PER_DISTANCE)
 
@@ -109,9 +101,8 @@ private fun LeaderboardScreen(repository: RunHistoryRepository, settingsReposito
                         entries.forEachIndexed { index, entry ->
                             val date =
                                 DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(entry.run.startedAtMillis))
-                            val suffix = if (entry.isEstimate) " (est.)" else ""
                             LeaderboardRow(
-                                "${index + 1}. %d:%02d$suffix".format(entry.seconds / 60, entry.seconds % 60),
+                                "${index + 1}. %d:%02d".format(entry.seconds / 60, entry.seconds % 60),
                                 date
                             )
                         }
@@ -158,13 +149,5 @@ private fun LeaderboardRow(value: String, date: String) {
     }
 }
 
-private fun leaderboardEntry(
-    run: RunSummary,
-    targetMeters: Float,
-    splitField: (RunSummary) -> Int?
-): LeaderboardEntry? {
-    splitField(run)?.let { return LeaderboardEntry(run, it, isEstimate = false) }
-    if (run.distanceMeters < targetMeters) return null
-    val avgPace = run.avgPaceSecPerKm ?: return null
-    return LeaderboardEntry(run, (avgPace * (targetMeters / 1000f)).toInt(), isEstimate = true)
-}
+private fun leaderboardEntry(run: RunSummary, splitField: (RunSummary) -> Int?): LeaderboardEntry? =
+    splitField(run)?.let { LeaderboardEntry(run, it) }
