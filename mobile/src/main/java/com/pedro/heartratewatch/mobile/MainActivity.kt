@@ -267,7 +267,7 @@ private fun SettingsScreen(
                     onChange = { draft = draft.copy(warmupSeconds = it) }
                 )
                 SwitchRow(
-                    "Launch Strava when starting a run (if installed on the watch)",
+                    "Launch Strava once you start a session (if installed on watch)",
                     draft.launchStravaOnStart
                 ) {
                     draft = draft.copy(launchStravaOnStart = it)
