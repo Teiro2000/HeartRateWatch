@@ -1291,15 +1291,21 @@ internal fun formatSet(set: LoggedSet, unit: WeightUnit): String =
 internal fun formatWeight(weight: Double): String =
     String.format(Locale.US, "%.2f", weight).trimEnd('0').trimEnd('.')
 
-/** Digits with at most one decimal point. */
+/**
+ * Digits with at most one decimal point (a decimal comma counts as the point), and an optional
+ * leading minus -- weights are negative for assisted exercises. Keyboards send the minus as a
+ * hyphen, a minus sign or an en dash, so all three are accepted.
+ */
 private fun filterDecimal(text: String): String {
     var seenDot = false
     return buildString {
         for (c in text) {
             if (c.isDigit()) append(c)
-            else if (c == '.' && !seenDot) {
-                append(c)
+            else if ((c == '.' || c == ',') && !seenDot) {
+                append('.')
                 seenDot = true
+            } else if ((c == '-' || c == '−' || c == '–') && isEmpty()) {
+                append('-')
             }
         }
     }
