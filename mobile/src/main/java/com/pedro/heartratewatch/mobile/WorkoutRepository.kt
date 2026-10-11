@@ -54,7 +54,7 @@ class WorkoutRepository(private val context: Context) {
     }
 
     suspend fun addExercise(name: String): Exercise {
-        val exercise = Exercise(id = newId(), name = name.trim())
+        val exercise = Exercise(id = newId(), name = name.capitalizedWords())
         context.workoutDataStore.edit { prefs ->
             val current = prefs[Keys.EXERCISES]?.let(::parseExercises) ?: DEFAULT_EXERCISES
             prefs[Keys.EXERCISES] = exercisesToJson(current + exercise)
@@ -164,7 +164,7 @@ class WorkoutRepository(private val context: Context) {
     private fun parseExercises(json: String): List<Exercise> = JSONArray(json).let { arr ->
         (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
-            Exercise(o.getString("id"), o.getString("name"), o.optBoolean("builtIn", false))
+            Exercise(o.getString("id"), o.getString("name").capitalizedWords(), o.optBoolean("builtIn", false))
         }
     }
 
@@ -238,7 +238,7 @@ class WorkoutRepository(private val context: Context) {
                 ExerciseLog(
                     id = e.getString("id"),
                     exerciseId = e.getString("exerciseId"),
-                    exerciseName = e.getString("exerciseName"),
+                    exerciseName = e.getString("exerciseName").capitalizedWords(),
                     intensity = if (e.isNull("intensity")) null else {
                         runCatching { Intensity.valueOf(e.getString("intensity")) }.getOrNull()
                     },
