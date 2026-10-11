@@ -449,12 +449,12 @@ private fun MenuScreen(
             }
         }
         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start workout") }
-        OutlinedButton(onClick = onTemplates, modifier = Modifier.fillMaxWidth()) { Text("Templates") }
-        OutlinedButton(onClick = onExercises, modifier = Modifier.fillMaxWidth()) { Text("Exercises") }
-        OutlinedButton(onClick = onHistory, modifier = Modifier.fillMaxWidth()) { Text("History") }
-        OutlinedButton(onClick = onProgress, modifier = Modifier.fillMaxWidth()) { Text("Progress") }
-        OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import from Excel") }
-        OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export to Excel") }
+        MenuListRow("Templates", onTemplates)
+        MenuListRow("Exercises", onExercises)
+        MenuListRow("History", onHistory)
+        MenuListRow("Progress", onProgress)
+        MenuListRow("Import from Excel", onImport)
+        MenuListRow("Export to Excel", onExport)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Weight unit", modifier = Modifier.weight(1f))
             WeightUnit.entries.forEach { option ->
