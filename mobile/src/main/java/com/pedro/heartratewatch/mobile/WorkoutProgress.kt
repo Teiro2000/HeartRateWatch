@@ -202,6 +202,12 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
                 Text("Ring = personal best", style = MaterialTheme.typography.labelSmall)
             }
         }
+        item {
+            Text(
+                "Epley formula: estimated 1RM = weight × (1 + reps ÷ 30). Epley is most accurate for sets of about 10 reps or fewer.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
 
         // Personal bests are always all-time, whatever range the chart is showing.
         if (allPoints.isNotEmpty()) {
