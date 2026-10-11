@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
@@ -158,7 +159,7 @@ private fun RunHistoryScreen(
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp)) {
             NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
-            Text("History", style = MaterialTheme.typography.headlineSmall)
+            Text("History", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { exportLauncher.launch("pulseguard_runs.csv") }) {
