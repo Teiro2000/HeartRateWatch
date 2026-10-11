@@ -630,7 +630,7 @@ private fun ExerciseCard(
                 val (workout, previous) = lastTime
                 Column {
                     Text(
-                        "Last time (${formatDate(workout.startedAtMillis)}): ${summarizeSets(previous.sets, unit)}",
+                        "${formatDate(workout.startedAtMillis)}: ${WorkoutText.summarize(previous.sets, unit)}",
                         style = MaterialTheme.typography.bodySmall
                     )
                     previous.intensity?.let { intensity ->
@@ -1282,10 +1282,6 @@ private fun lastTimeFor(history: List<WorkoutLog>, exerciseId: String): Pair<Wor
             }
             ?.let { workout to it }
     }
-
-private fun summarizeSets(sets: List<LoggedSet>, unit: WeightUnit): String =
-    sets.filter { it.weight != null || it.reps != null }.joinToString(", ") { formatSet(it, unit) }
-        .ifEmpty { "no sets logged" }
 
 internal fun formatSet(set: LoggedSet, unit: WeightUnit): String =
     "${set.weight?.let { formatWeight(unit.fromLb(it)) + " " + unit.symbol } ?: "?"} x ${set.reps ?: "?"}"

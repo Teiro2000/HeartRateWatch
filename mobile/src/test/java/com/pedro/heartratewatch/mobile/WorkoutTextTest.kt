@@ -33,6 +33,17 @@ class WorkoutTextTest {
     }
 
     @Test
+    fun summarizeGroupsSetsByWeightAndReps() {
+        val sets = listOf(
+            LoggedSet("1", 50.0, 12), LoggedSet("2", 40.0, 12), LoggedSet("3", 50.0, 12),
+            LoggedSet("4", null, 20), LoggedSet("5", null, null)
+        )
+        assertEquals("1x20, 40lbs 1x12, 50lbs 2x12", WorkoutText.summarize(sets, WeightUnit.LB))
+        assertEquals("20lbs 3x12", WorkoutText.summarize(List(3) { LoggedSet("$it", 20.0, 12) }, WeightUnit.LB))
+        assertEquals("no sets logged", WorkoutText.summarize(emptyList(), WeightUnit.LB))
+    }
+
+    @Test
     fun usesTheChosenUnit() {
         val line = WorkoutText.exerciseLine(log("Squat", listOf(LoggedSet("1", 220.46226218, 5))), WeightUnit.KG)
         assertEquals("Squat 1*5 100kg", line)

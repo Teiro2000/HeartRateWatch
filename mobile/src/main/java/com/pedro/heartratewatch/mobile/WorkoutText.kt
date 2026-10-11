@@ -41,6 +41,21 @@ object WorkoutText {
         }
     }
 
+    /**
+     * A short recap of the sets for the "last time" line: sets with the same weight and reps are
+     * counted together and listed lightest first, e.g. `40lbs 1x12, 50lbs 2x12`. Empty sets are skipped.
+     */
+    fun summarize(sets: List<LoggedSet>, unit: WeightUnit): String =
+        sets.filter { it.weight != null || it.reps != null }
+            .groupBy { it.weight to it.reps }
+            .entries
+            .sortedBy { it.key.first ?: Double.NEGATIVE_INFINITY }
+            .joinToString(", ") { (key, group) ->
+                val shape = "${group.size}x${key.second ?: "?"}"
+                if (key.first == null) shape else "${weightText(key.first!!, unit)} $shape"
+            }
+            .ifEmpty { "no sets logged" }
+
     private fun weightText(weightLb: Double, unit: WeightUnit): String =
         String.format(Locale.US, "%.2f", unit.fromLb(weightLb)).trimEnd('0').trimEnd('.') +
             (if (unit == WeightUnit.LB) "lbs" else unit.symbol)   // "lbs", as written in the original log
