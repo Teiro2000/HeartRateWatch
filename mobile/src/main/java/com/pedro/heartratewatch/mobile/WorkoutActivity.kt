@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -73,6 +75,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
@@ -707,6 +710,9 @@ private fun TemplatesScreen(
     var order by remember(templates) { mutableStateOf(templates) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
+    // Delete is hidden until a template is held still for 2 seconds (see the hold detector below),
+    // so it can't be hit by accident while scrolling or reordering.
+    var revealedId by remember { mutableStateOf<String?>(null) }
     val heights = remember { mutableMapOf<String, Int>() }
     val gap = with(LocalDensity.current) { 8.dp.toPx() }
     val haptics = LocalHapticFeedback.current
@@ -755,7 +761,7 @@ private fun TemplatesScreen(
         if (templates.isEmpty()) {
             Text("No templates yet. Make one per workout day (leg day, shoulders...) to start workouts in one tap.")
         } else {
-            Text("Press and hold a template, drag it, and let go where you want it.", style = MaterialTheme.typography.bodySmall)
+            Text("Press, hold and drag a template, then let go where you want it. Hold one still for 2 seconds to show Delete.", style = MaterialTheme.typography.bodySmall)
         }
         order.forEach { template ->
             val dragging = draggingId == template.id
@@ -781,6 +787,28 @@ private fun TemplatesScreen(
                             onDragCancel = { finishDrag() }
                         )
                     }
+                    .pointerInput(template.id to "hold") {
+                        // Watches the same press without taking it over: if the finger stays down and
+                        // doesn't move for 2 seconds, this template's Delete button appears. Moving
+                        // (dragging) or lifting earlier cancels it.
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            if (revealedId != template.id) revealedId = null
+                            val outcome = withTimeoutOrNull(2_000) {
+                                var stillHeld = true
+                                while (stillHeld) {
+                                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                                    stillHeld = change != null && change.pressed &&
+                                        (change.position - down.position).getDistance() <= viewConfiguration.touchSlop
+                                }
+                                false
+                            }
+                            if (outcome == null && dragOffset == 0f) {   // timed out with the finger still: not a drag
+                                revealedId = template.id
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        }
+                    }
                     .clickable { onEdit(template) }
             ) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -788,7 +816,9 @@ private fun TemplatesScreen(
                         Text(template.name, style = MaterialTheme.typography.titleMedium)
                         Text("${template.exerciseIds.size} exercises", style = MaterialTheme.typography.bodySmall)
                     }
-                    TextButton(onClick = { pendingDelete = template }) { Text("Delete") }
+                    if (revealedId == template.id) {
+                        TextButton(onClick = { pendingDelete = template }) { Text("Delete") }
+                    }
                 }
             }
         }
@@ -797,8 +827,8 @@ private fun TemplatesScreen(
         ConfirmDialog(
             text = "Delete the template \"${template.name}\"? Past workouts aren't affected.",
             confirmLabel = "Delete",
-            onConfirm = { onDelete(template); pendingDelete = null },
-            onDismiss = { pendingDelete = null }
+            onConfirm = { onDelete(template); pendingDelete = null; revealedId = null },
+            onDismiss = { pendingDelete = null; revealedId = null }
         )
     }
 }
