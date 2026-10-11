@@ -90,6 +90,15 @@ class WorkoutRepository(private val context: Context) {
         }
     }
 
+    /** Saves a new order for the templates; any not named in [orderedIds] keep their place at the end. */
+    suspend fun reorderTemplates(orderedIds: List<String>) {
+        context.workoutDataStore.edit { prefs ->
+            val current = prefs[Keys.TEMPLATES]?.let(::parseTemplates).orEmpty()
+            val position = orderedIds.withIndex().associate { (index, id) -> id to index }
+            prefs[Keys.TEMPLATES] = templatesToJson(current.sortedBy { position[it.id] ?: Int.MAX_VALUE })
+        }
+    }
+
     suspend fun deleteTemplate(id: String) {
         context.workoutDataStore.edit { prefs ->
             val current = prefs[Keys.TEMPLATES]?.let(::parseTemplates).orEmpty()

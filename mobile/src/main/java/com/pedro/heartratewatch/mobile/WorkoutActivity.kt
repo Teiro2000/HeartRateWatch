@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -283,7 +295,8 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     templates = templates,
                     onNew = { screen = Screen.TemplateEdit(null) },
                     onEdit = { screen = Screen.TemplateEdit(it.id) },
-                    onDelete = { scope.launch { repository.deleteTemplate(it.id) } }
+                    onDelete = { scope.launch { repository.deleteTemplate(it.id) } },
+                    onReorder = { ids -> scope.launch { repository.reorderTemplates(ids) } }
                 )
 
                 is Screen.TemplateEdit -> TemplateEditScreen(
@@ -683,25 +696,89 @@ private fun TemplatesScreen(
     templates: List<WorkoutTemplate>,
     onNew: () -> Unit,
     onEdit: (WorkoutTemplate) -> Unit,
-    onDelete: (WorkoutTemplate) -> Unit
+    onDelete: (WorkoutTemplate) -> Unit,
+    onReorder: (List<String>) -> Unit
 ) {
     var pendingDelete by remember { mutableStateOf<WorkoutTemplate?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+    // Long-press a template and drag it up or down. The order is held locally while dragging (so it
+    // moves smoothly) and saved once the finger lifts; it's reset from storage whenever that changes.
+    var order by remember(templates) { mutableStateOf(templates) }
+    var draggingId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    val heights = remember { mutableMapOf<String, Int>() }
+    val gap = with(LocalDensity.current) { 8.dp.toPx() }
+    val haptics = LocalHapticFeedback.current
+
+    fun swapIfPassedNeighbour() {
+        val id = draggingId ?: return
+        val index = order.indexOfFirst { it.id == id }
+        if (index < 0) return
+        if (dragOffset > 0 && index < order.lastIndex) {
+            val step = (heights[order[index + 1].id] ?: 0) + gap
+            if (dragOffset > step / 2) {
+                order = order.toMutableList().also { it.add(index + 1, it.removeAt(index)) }
+                dragOffset -= step
+            }
+        } else if (dragOffset < 0 && index > 0) {
+            val step = (heights[order[index - 1].id] ?: 0) + gap
+            if (-dragOffset > step / 2) {
+                order = order.toMutableList().also { it.add(index - 1, it.removeAt(index)) }
+                dragOffset += step
+            }
+        }
+    }
+
+    fun finishDrag() {
+        if (draggingId != null) onReorder(order.map { it.id })
+        draggingId = null
+        dragOffset = 0f
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         ScreenTitle("Templates")
         Button(onClick = onNew, modifier = Modifier.fillMaxWidth()) { Text("New template") }
         if (templates.isEmpty()) {
             Text("No templates yet. Make one per workout day (leg day, shoulders...) to start workouts in one tap.")
+        } else {
+            Text("Press and hold a template, then drag it to change the order.", style = MaterialTheme.typography.bodySmall)
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(templates, key = { it.id }) { template ->
-                OutlinedCard(modifier = Modifier.fillMaxWidth().clickable { onEdit(template) }) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(template.name, style = MaterialTheme.typography.titleMedium)
-                            Text("${template.exerciseIds.size} exercises", style = MaterialTheme.typography.bodySmall)
-                        }
-                        TextButton(onClick = { pendingDelete = template }) { Text("Delete") }
+        order.forEach { template ->
+            val dragging = draggingId == template.id
+            OutlinedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(if (dragging) 1f else 0f)
+                    .offset { IntOffset(0, if (dragging) dragOffset.roundToInt() else 0) }
+                    .alpha(if (dragging) 0.85f else 1f)
+                    .onGloballyPositioned { heights[template.id] = it.size.height }
+                    .pointerInput(template.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                draggingId = template.id
+                                dragOffset = 0f
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragOffset += amount.y
+                                swapIfPassedNeighbour()
+                            },
+                            onDragEnd = { finishDrag() },
+                            onDragCancel = { finishDrag() }
+                        )
                     }
+                    .clickable { onEdit(template) }
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(template.name, style = MaterialTheme.typography.titleMedium)
+                        Text("${template.exerciseIds.size} exercises", style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = { pendingDelete = template }) { Text("Delete") }
                 }
             }
         }
