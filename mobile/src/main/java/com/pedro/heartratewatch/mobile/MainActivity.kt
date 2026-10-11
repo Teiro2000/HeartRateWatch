@@ -212,7 +212,6 @@ private fun SettingsScreen(
                 LiveRunStatsRow(liveRun, saved)
             } else {
                 DashboardStatsRow(
-                    streakDays = currentStreakDays(runs),
                     thisMonth = formatDistance(thisMonthDistanceMeters(runs).toFloat(), saved.distanceUnit),
                     lastWorkout = runs.maxByOrNull { it.startedAtMillis }
                         ?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it.startedAtMillis)) }
@@ -729,9 +728,8 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 /** At-a-glance home screen stats, derived straight from run history -- no separate stored state,
  * so they can never drift from what Run History/the leaderboard/the monthly chart themselves show. */
 @Composable
-private fun DashboardStatsRow(streakDays: Int, thisMonth: String, lastWorkout: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        StatItem("Streak", if (streakDays > 0) "$streakDays d" else "--")
+private fun DashboardStatsRow(thisMonth: String, lastWorkout: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
         StatItem("This month", thisMonth)
         StatItem("Last cardio session", lastWorkout)
     }
