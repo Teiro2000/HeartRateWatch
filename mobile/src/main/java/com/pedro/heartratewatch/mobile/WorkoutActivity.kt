@@ -710,7 +710,7 @@ private fun TemplatesScreen(
     var order by remember(templates) { mutableStateOf(templates) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
-    // Delete is hidden until a template is held still for 2 seconds (see the hold detector below),
+    // Delete is hidden until a template is held still for 1 second (see the hold detector below),
     // so it can't be hit by accident while scrolling or reordering.
     var revealedId by remember { mutableStateOf<String?>(null) }
     val heights = remember { mutableMapOf<String, Int>() }
@@ -761,7 +761,7 @@ private fun TemplatesScreen(
         if (templates.isEmpty()) {
             Text("No templates yet. Make one per workout day (leg day, shoulders...) to start workouts in one tap.")
         } else {
-            Text("Press, hold and drag a template, then let go where you want it. Hold one still for 2 seconds to show Delete.", style = MaterialTheme.typography.bodySmall)
+            Text("Press, hold and drag a template, then let go where you want it. Hold one still for 1 second to show Delete.", style = MaterialTheme.typography.bodySmall)
         }
         order.forEach { template ->
             val dragging = draggingId == template.id
@@ -789,12 +789,12 @@ private fun TemplatesScreen(
                     }
                     .pointerInput(template.id to "hold") {
                         // Watches the same press without taking it over: if the finger stays down and
-                        // doesn't move for 2 seconds, this template's Delete button appears. Moving
+                        // doesn't move for 1 second, this template's Delete button appears. Moving
                         // (dragging) or lifting earlier cancels it.
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             if (revealedId != template.id) revealedId = null
-                            val outcome = withTimeoutOrNull(2_000) {
+                            val outcome = withTimeoutOrNull(1_000) {
                                 var stillHeld = true
                                 while (stillHeld) {
                                     val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
