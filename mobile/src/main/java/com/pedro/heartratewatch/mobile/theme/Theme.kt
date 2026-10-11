@@ -6,9 +6,12 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import android.graphics.drawable.ColorDrawable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,8 +72,9 @@ private fun Typography.monospaced(): Typography = copy(
 @Composable
 fun PipBoyTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val useLightTheme by remember(context) { ThemePreferenceRepository(context).useLightThemeFlow }
-        .collectAsStateWithLifecycle(initialValue = false)
+    val themePreference = remember(context) { ThemePreferenceRepository(context) }
+    val useLightTheme by themePreference.useLightThemeFlow
+        .collectAsStateWithLifecycle(initialValue = themePreference.currentUseLightTheme())
 
     // Building on darkColorScheme()/lightColorScheme() (rather than copying MaterialTheme's own
     // default scheme) matters: each fills in every role with a sensible default of the right
@@ -128,6 +132,9 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
             onError = PipBoyBlack
         )
     }
+    // The window behind Compose (visible while a screen opens) matches the theme, not the manifest's light default.
+    val window = (context as? android.app.Activity)?.window
+    SideEffect { window?.setBackgroundDrawable(ColorDrawable(colorScheme.background.toArgb())) }
     val typography = if (useLightTheme) MaterialTheme.typography.serifTitles() else MaterialTheme.typography.monospaced()
     MaterialTheme(colorScheme = colorScheme, typography = typography) {
         Surface(color = colorScheme.background, content = content)
