@@ -352,6 +352,8 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     exercises = exercises,
                     onAdd = { name -> scope.launch { repository.addExercise(name) } },
                     onDelete = { scope.launch { repository.deleteExercise(it.id) } },
+                    unused = unusedExercises(exercises, history, templates, active),
+                    onDeleteUnused = { ids -> scope.launch { repository.deleteExercises(ids) } },
                     onRestoreDefaults = { scope.launch { repository.restoreDefaultExercises() } }
                 )
 
@@ -966,10 +968,13 @@ private fun ExercisesScreen(
     exercises: List<Exercise>,
     onAdd: (String) -> Unit,
     onDelete: (Exercise) -> Unit,
+    unused: List<Exercise>,
+    onDeleteUnused: (Set<String>) -> Unit,
     onRestoreDefaults: () -> Unit
 ) {
     var newName by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Exercise?>(null) }
+    var confirmDeleteUnused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ScreenTitle("Exercises")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -988,6 +993,11 @@ private fun ExercisesScreen(
         OutlinedButton(onClick = onRestoreDefaults, modifier = Modifier.fillMaxWidth()) {
             Text("Restore default exercises")
         }
+        OutlinedButton(
+            onClick = { confirmDeleteUnused = true },
+            enabled = unused.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (unused.isEmpty()) "No unused exercises" else "Remove unused exercises (${unused.size})") }
         LazyColumn {
             items(exercises.sortedBy { it.name.lowercase() }, key = { it.id }) { exercise ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -997,6 +1007,16 @@ private fun ExercisesScreen(
                 HorizontalDivider()
             }
         }
+    }
+    if (confirmDeleteUnused) {
+        ConfirmDialog(
+            text = "Remove ${unused.size} exercises that aren't in any workout or template?\n\n" +
+                unused.map { it.name }.sorted().joinToString(", ") +
+                "\n\nDefault exercises can be restored later.",
+            confirmLabel = "Remove",
+            onConfirm = { onDeleteUnused(unused.map { it.id }.toSet()); confirmDeleteUnused = false },
+            onDismiss = { confirmDeleteUnused = false }
+        )
     }
     pendingDelete?.let { exercise ->
         ConfirmDialog(

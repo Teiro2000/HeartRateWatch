@@ -62,6 +62,13 @@ class WorkoutRepository(private val context: Context) {
         return exercise
     }
 
+    suspend fun deleteExercises(ids: Set<String>) {
+        context.workoutDataStore.edit { prefs ->
+            val current = prefs[Keys.EXERCISES]?.let(::parseExercises) ?: DEFAULT_EXERCISES
+            prefs[Keys.EXERCISES] = exercisesToJson(current.filterNot { it.id in ids })
+        }
+    }
+
     suspend fun deleteExercise(id: String) {
         context.workoutDataStore.edit { prefs ->
             val current = prefs[Keys.EXERCISES]?.let(::parseExercises) ?: DEFAULT_EXERCISES
