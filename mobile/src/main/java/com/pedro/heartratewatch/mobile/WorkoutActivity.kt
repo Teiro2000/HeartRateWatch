@@ -459,8 +459,8 @@ private fun MenuScreen(
         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start workout") }
         MenuListRow("Templates", Icons.Outlined.ViewAgenda, onTemplates)
         MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
-        MenuListRow("History", Icons.Outlined.History, onHistory)
         MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
+        MenuListRow("History", Icons.Outlined.History, onHistory)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Weight unit", modifier = Modifier.weight(1f))
             WeightUnit.entries.forEach { option ->
