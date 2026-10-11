@@ -1063,6 +1063,15 @@ private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Uni
         ScreenTitle("History")
         if (history.isEmpty()) Text("No finished workouts yet.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (history.isNotEmpty()) {
+                item {
+                    OutlinedButton(
+                        onClick = { confirmDeleteAll = true },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) { Text("Remove all workouts", color = MaterialTheme.colorScheme.error) }
+                }
+            }
             items(history, key = { it.id }) { workout ->
                 OutlinedCard(modifier = Modifier.fillMaxWidth().clickable { onOpen(workout) }) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -1073,15 +1082,6 @@ private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Uni
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                }
-            }
-            if (history.isNotEmpty()) {
-                item {
-                    OutlinedButton(
-                        onClick = { confirmDeleteAll = true },
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
-                    ) { Text("Remove all workouts", color = MaterialTheme.colorScheme.error) }
                 }
             }
         }

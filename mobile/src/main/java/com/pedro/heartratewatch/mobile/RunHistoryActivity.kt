@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -91,6 +92,7 @@ private fun RunHistoryScreen(
     val distanceTarget = settings.distanceTargetMeters
     val snackbarHostState = remember { SnackbarHostState() }
     var editingDistanceFor by remember { mutableStateOf<RunSummary?>(null) }
+    var confirmRemoveAll by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
@@ -139,6 +141,20 @@ private fun RunHistoryScreen(
         )
     }
 
+    if (confirmRemoveAll) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoveAll = false },
+            text = { Text("Are you sure you want to remove all ${runs.size} workouts? This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemoveAll = false
+                    scope.launch { repository.removeAllRuns() }
+                }) { Text("Remove all") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemoveAll = false }) { Text("Cancel") } }
+        )
+    }
+
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp)) {
             Text("History", style = MaterialTheme.typography.headlineSmall)
@@ -150,6 +166,14 @@ private fun RunHistoryScreen(
                 Button(onClick = { importLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "*/*")) }) {
                     Text("Import")
                 }
+            }
+            if (runs.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { confirmRemoveAll = true },
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Remove all workouts", color = MaterialTheme.colorScheme.error) }
             }
             Spacer(Modifier.height(16.dp))
 
