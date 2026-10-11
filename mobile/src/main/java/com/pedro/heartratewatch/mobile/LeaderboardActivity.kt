@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
@@ -66,6 +67,7 @@ class LeaderboardActivity : ComponentActivity() {
 
 @Composable
 private fun LeaderboardScreen(repository: RunHistoryRepository, settingsRepository: SettingsRepository) {
+    val context = LocalContext.current
     val allWorkouts by repository.historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(initialValue = TrainingSettings())
 
@@ -85,6 +87,7 @@ private fun LeaderboardScreen(repository: RunHistoryRepository, settingsReposito
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
             Text("Leaderboard", style = MaterialTheme.typography.headlineSmall)
             Text(
                 "Real recorded splits where available; entries marked (est.) are approximated from " +

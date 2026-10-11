@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,6 +46,26 @@ class HomeActivity : ComponentActivity() {
         setContent {
             PipBoyTheme { HomeScreen() }
         }
+    }
+}
+
+/** What the system back button does for the current activity -- for screens that show their own Back button. */
+@Composable
+fun rememberSystemBack(): () -> Unit {
+    val dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    return { dispatcher?.onBackPressed() }
+}
+
+/**
+ * The "< Back" and "Main menu" buttons shown top-left on every screen below the Cardio / Workout
+ * menus. [onBack] null hides Back (for a screen that is itself a menu, where Back would be the
+ * same as Main menu).
+ */
+@Composable
+fun NavButtons(onBack: (() -> Unit)?, onMainMenu: () -> Unit) {
+    Row {
+        if (onBack != null) TextButton(onClick = onBack) { Text("< Back") }
+        TextButton(onClick = onMainMenu) { Text("Main menu") }
     }
 }
 

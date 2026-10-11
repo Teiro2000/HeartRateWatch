@@ -254,6 +254,7 @@ private fun WorkoutApp(repository: WorkoutRepository) {
     }
 
     CompositionLocalProvider(
+        LocalGoBack provides (if (screen == Screen.Menu) null else ({ screen = parentOf(screen) })),
         LocalGoToMainMenu provides {
             // Saved explicitly first: the debounced autosave above could otherwise miss the last
             // edit made in the half second before leaving.
@@ -391,11 +392,14 @@ private fun WorkoutApp(repository: WorkoutRepository) {
 /** Goes back to the Run/Workout picker (saving the in-progress workout first) -- set by WorkoutApp. */
 private val LocalGoToMainMenu = compositionLocalOf<() -> Unit> { {} }
 
+/** One screen up (what the system back button does); null on the workout menu itself. */
+private val LocalGoBack = compositionLocalOf<(() -> Unit)?> { null }
+
 @Composable
 internal fun ScreenTitle(text: String) {
-    // Same "< Main menu" button, top-left, as the Run screen; the title sits centered below it.
+    // "< Back" and "Main menu" buttons top-left; the title sits centered below them.
     Column(modifier = Modifier.fillMaxWidth()) {
-        TextButton(onClick = LocalGoToMainMenu.current) { Text("< Main menu") }
+        NavButtons(onBack = LocalGoBack.current, onMainMenu = LocalGoToMainMenu.current)
         Text(
             text,
             style = MaterialTheme.typography.headlineSmall,

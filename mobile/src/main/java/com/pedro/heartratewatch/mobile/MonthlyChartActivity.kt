@@ -118,6 +118,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
             Text("Monthly distance", style = MaterialTheme.typography.headlineSmall)
 
             if (totals.isEmpty()) {
