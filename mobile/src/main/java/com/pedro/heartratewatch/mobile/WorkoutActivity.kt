@@ -701,8 +701,9 @@ private fun TemplatesScreen(
 ) {
     var pendingDelete by remember { mutableStateOf<WorkoutTemplate?>(null) }
 
-    // Long-press a template and drag it up or down. The order is held locally while dragging (so it
-    // moves smoothly) and saved once the finger lifts; it's reset from storage whenever that changes.
+    // Press and hold a template, then drag it up or down. The card just follows the finger while
+    // dragging -- nothing else shifts -- and only when it's let go does it move to wherever it was
+    // dropped, and the new order is saved. The list is reset from storage whenever that changes.
     var order by remember(templates) { mutableStateOf(templates) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
@@ -710,27 +711,37 @@ private fun TemplatesScreen(
     val gap = with(LocalDensity.current) { 8.dp.toPx() }
     val haptics = LocalHapticFeedback.current
 
-    fun swapIfPassedNeighbour() {
-        val id = draggingId ?: return
-        val index = order.indexOfFirst { it.id == id }
-        if (index < 0) return
-        if (dragOffset > 0 && index < order.lastIndex) {
+    /** Where the dragged card ends up: it moves past a neighbour once it's over halfway across it. */
+    fun dropIndex(from: Int): Int {
+        var index = from
+        var remaining = dragOffset
+        while (remaining > 0 && index < order.lastIndex) {
             val step = (heights[order[index + 1].id] ?: 0) + gap
-            if (dragOffset > step / 2) {
-                order = order.toMutableList().also { it.add(index + 1, it.removeAt(index)) }
-                dragOffset -= step
-            }
-        } else if (dragOffset < 0 && index > 0) {
-            val step = (heights[order[index - 1].id] ?: 0) + gap
-            if (-dragOffset > step / 2) {
-                order = order.toMutableList().also { it.add(index - 1, it.removeAt(index)) }
-                dragOffset += step
-            }
+            if (remaining <= step / 2) break
+            index++
+            remaining -= step
         }
+        while (remaining < 0 && index > 0) {
+            val step = (heights[order[index - 1].id] ?: 0) + gap
+            if (-remaining <= step / 2) break
+            index--
+            remaining += step
+        }
+        return index
     }
 
     fun finishDrag() {
-        if (draggingId != null) onReorder(order.map { it.id })
+        val id = draggingId
+        if (id != null) {
+            val from = order.indexOfFirst { it.id == id }
+            if (from >= 0) {
+                val to = dropIndex(from)
+                if (to != from) {
+                    order = order.toMutableList().also { it.add(to, it.removeAt(from)) }
+                    onReorder(order.map { it.id })
+                }
+            }
+        }
         draggingId = null
         dragOffset = 0f
     }
@@ -744,7 +755,7 @@ private fun TemplatesScreen(
         if (templates.isEmpty()) {
             Text("No templates yet. Make one per workout day (leg day, shoulders...) to start workouts in one tap.")
         } else {
-            Text("Press and hold a template, then drag it to change the order.", style = MaterialTheme.typography.bodySmall)
+            Text("Press and hold a template, drag it, and let go where you want it.", style = MaterialTheme.typography.bodySmall)
         }
         order.forEach { template ->
             val dragging = draggingId == template.id
@@ -765,7 +776,6 @@ private fun TemplatesScreen(
                             onDrag = { change, amount ->
                                 change.consume()
                                 dragOffset += amount.y
-                                swapIfPassedNeighbour()
                             },
                             onDragEnd = { finishDrag() },
                             onDragCancel = { finishDrag() }
