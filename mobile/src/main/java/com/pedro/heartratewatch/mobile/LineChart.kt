@@ -37,7 +37,7 @@ private const val TOP_PAD_DP = 12f
 private const val BOTTOM_PAD_DP = 24f
 
 /**
- * The line chart used by both the workout Progress screen and the run Monthly stats: dots joined
+ * The line chart used by both the workout Progress screen and the run Stats screen: dots joined
  * by lines, x spread out by time, y scaled to fit, a vertical marker on the tapped point. Tapping
  * within ~40dp of a point's column calls [onSelect] with its index (tapping elsewhere clears it).
  * [xMillis] must be ascending and every series needs one value per entry.
