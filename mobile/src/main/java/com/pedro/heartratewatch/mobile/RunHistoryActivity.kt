@@ -141,7 +141,7 @@ private fun RunHistoryScreen(
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp)) {
-            Text("Run history", style = MaterialTheme.typography.headlineSmall)
+            Text("History", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { exportLauncher.launch("pulseguard_runs.csv") }) {
