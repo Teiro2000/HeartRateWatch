@@ -91,23 +91,25 @@ class HeartRateTileService : TileService() {
         // whatever the phone last pushed to DashboardStatsStore (see SettingsSyncListenerService).
         val middleContent = if (state.isActive) {
             val bpm = state.currentBpm
-            val bpmStatus = heartRateStatus(bpm, settings, maxHrBpm)
+            // No reading yet means no judgement either -- an arrow next to "--" would be misleading.
+            val bpmStatus = if (bpm == null) null else heartRateStatus(bpm, settings, maxHrBpm)
             val readouts = LayoutElementBuilders.Column.Builder()
                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-                .addContent(bigValue(statusArrow(bpmStatus) + (bpm?.toString() ?: "--"), statusColor(bpmStatus)))
+                .addContent(valueText(statusArrow(bpmStatus), bpm?.toString() ?: "--", statusColor(bpmStatus), BIG_SIZE_SP))
                 .addContent(smallLabel("bpm"))
             if (isRun) {
                 val paceSec = state.currentPaceSecPerKm
-                val paceStatus = paceStatus(paceSec, settings)
+                val paceStatus = if (paceSec == null) null else paceStatus(paceSec, settings)
                 readouts.addContent(spacer(6f))
                 readouts.addContent(
                     LayoutElementBuilders.Row.Builder()
                         .setWidth(expand())
                         .addContent(
                             readoutColumn(
-                                statusArrow(paceStatus) + (paceSec?.let { formatPace(it, settings.paceUnit).substringBefore(" /") } ?: "--"),
+                                paceSec?.let { formatPace(it, settings.paceUnit).substringBefore(" /") } ?: "--",
                                 statusColor(paceStatus),
-                                "pace /${settings.paceUnit.symbol}"
+                                "pace /${settings.paceUnit.symbol}",
+                                arrow = statusArrow(paceStatus)
                             )
                         )
                         .addContent(
@@ -260,20 +262,34 @@ class HeartRateTileService : TileService() {
     }
 
     private fun statusArrow(status: EffortStatus?): String = when (status) {
-        EffortStatus.TOO_HIGH -> "▲ "
-        EffortStatus.TOO_LOW -> "▼ "
+        EffortStatus.TOO_HIGH -> "▲"
+        EffortStatus.TOO_LOW -> "▼"
         else -> ""
     }
 
-    /** The large heart rate number. */
-    private fun bigValue(text: String, color: Int): LayoutElementBuilders.Text =
-        LayoutElementBuilders.Text.Builder()
-            .setText(text)
-            .setFontStyle(
-                LayoutElementBuilders.FontStyle.Builder()
-                    .setSize(sp(BIG_SIZE_SP)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
+    /** A bold number, with a small up/down arrow beside it when the effort is off target. */
+    private fun valueText(arrow: String, value: String, color: Int, sizeSp: Float): LayoutElementBuilders.Row {
+        val row = LayoutElementBuilders.Row.Builder()
+            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+        if (arrow.isNotEmpty()) {
+            row.addContent(
+                LayoutElementBuilders.Text.Builder()
+                    .setText("$arrow ")
+                    .setFontStyle(LayoutElementBuilders.FontStyle.Builder().setSize(sp(sizeSp * 0.45f)).setColor(argb(color)).build())
+                    .build()
             )
-            .build()
+        }
+        row.addContent(
+            LayoutElementBuilders.Text.Builder()
+                .setText(value)
+                .setFontStyle(
+                    LayoutElementBuilders.FontStyle.Builder()
+                        .setSize(sp(sizeSp)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
+                )
+                .build()
+        )
+        return row.build()
+    }
 
     /** A small caption under a number ("bpm", "pace /mi"). */
     private fun smallLabel(text: String, sizeSp: Float = LABEL_SIZE_SP): LayoutElementBuilders.Text =
@@ -291,20 +307,13 @@ class HeartRateTileService : TileService() {
         color: Int,
         label: String,
         valueSizeSp: Float = MEDIUM_SIZE_SP,
-        labelSizeSp: Float = LABEL_SIZE_SP
+        labelSizeSp: Float = LABEL_SIZE_SP,
+        arrow: String = ""
     ): LayoutElementBuilders.Column =
         LayoutElementBuilders.Column.Builder()
             .setWidth(weight(1f))
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .addContent(
-                LayoutElementBuilders.Text.Builder()
-                    .setText(value)
-                    .setFontStyle(
-                        LayoutElementBuilders.FontStyle.Builder()
-                            .setSize(sp(valueSizeSp)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
-                    )
-                    .build()
-            )
+            .addContent(valueText(arrow, value, color, valueSizeSp))
             .addContent(smallLabel(label, labelSizeSp))
             .build()
 
@@ -336,7 +345,7 @@ class HeartRateTileService : TileService() {
     private companion object {
         // Bump whenever the layout changes -- resources (not the live data) are cached by
         // version, and this is what invalidates that cache.
-        const val RESOURCES_VERSION = "6"
+        const val RESOURCES_VERSION = "7"
         const val BIG_SIZE_SP = 38f
         const val MEDIUM_SIZE_SP = 20f
         const val LABEL_SIZE_SP = 11f
