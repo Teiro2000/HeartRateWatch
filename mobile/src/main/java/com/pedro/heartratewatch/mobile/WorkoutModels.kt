@@ -56,8 +56,7 @@ data class WorkoutLog(
 
 /** Starting set of exercises, so the database isn't empty on first launch. */
 val DEFAULT_EXERCISES: List<Exercise> = listOf(
-    "Squat", "Deadlift", "Bench Press", "Overhead Press", "Barbell Row", "Pull-Up", "Chin-Up",
-    "Dip", "Lunge", "Leg Press", "Romanian Deadlift", "Lat Pulldown", "Incline Bench Press",
-    "Dumbbell Curl", "Triceps Pushdown", "Lateral Raise", "Leg Curl", "Leg Extension",
-    "Calf Raise", "Plank"
+    "Squat", "Deadlift", "Bench Press", "Overhead Press", "Barbell Row", "Chin-Up",
+    "Dip", "Leg Press", "Romanian Deadlift", "Lat Pulldown", "Incline Bench Press",
+    "Dumbbell Curl", "Triceps Pushdown", "Leg Extension", "Calf Raise"
 ).map { Exercise(id = "builtin_" + it.lowercase().replace(Regex("[^a-z0-9]+"), "_"), name = it, builtIn = true) }
