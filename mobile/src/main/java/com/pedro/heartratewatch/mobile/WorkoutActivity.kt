@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,6 +59,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
@@ -66,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -551,12 +554,7 @@ private fun ActiveWorkoutScreen(
             }
         }
         item {
-            OutlinedTextField(
-                value = workout.note,
-                onValueChange = { onChange(workout.copy(note = it)) },
-                label = { Text("Workout notes") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            NoteField(workout.note, "Workout notes") { onChange(workout.copy(note = it)) }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 24.dp)) {
@@ -661,14 +659,33 @@ private fun ExerciseCard(
 
             IntensityPicker(selected = log.intensity, onSelect = { onChange(log.copy(intensity = it)) })
 
-            OutlinedTextField(
-                value = log.note,
-                onValueChange = { onChange(log.copy(note = it)) },
-                label = { Text("Notes") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            NoteField(log.note, "Notes") { onChange(log.copy(note = it)) }
         }
     }
+}
+
+/**
+ * A notes box that wraps long text but treats Enter as "done": instead of adding a line break it
+ * closes the keyboard and leaves the box.
+ */
+@Composable
+private fun NoteField(value: String, label: String, onChange: (String) -> Unit) {
+    val focusManager = LocalFocusManager.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = { typed ->
+            if (typed.contains('\n')) {
+                onChange(typed.replace("\n", "").replace("\r", ""))
+                focusManager.clearFocus()
+            } else {
+                onChange(typed)
+            }
+        },
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
