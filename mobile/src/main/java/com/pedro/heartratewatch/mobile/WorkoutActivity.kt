@@ -36,8 +36,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material3.AlertDialog
@@ -287,12 +285,7 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     onTemplates = { screen = Screen.Templates },
                     onExercises = { screen = Screen.Exercises },
                     onHistory = { screen = Screen.History },
-                    onProgress = { screen = Screen.Progress },
-                    onImport = { showImportHelp = true },
-                    onExport = {
-                        if (history.isEmpty()) importMessage = "There are no finished workouts to export yet."
-                        else exportPicker.launch("PulseGuard workouts.xlsx")
-                    }
+                    onProgress = { screen = Screen.Progress }
                 )
 
                 Screen.ChooseTemplate -> ChooseTemplateScreen(
@@ -378,6 +371,11 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     history = history,
                     numbers = WorkoutExporter.numbering(history),
                     onOpen = { screen = Screen.HistoryDetail(it.id) },
+                    onImport = { showImportHelp = true },
+                    onExport = {
+                        if (history.isEmpty()) importMessage = "There are no finished workouts to export yet."
+                        else exportPicker.launch("PulseGuard workouts.xlsx")
+                    },
                     onDeleteAll = { scope.launch { repository.deleteAllWorkouts() } }
                 )
 
@@ -438,9 +436,7 @@ private fun MenuScreen(
     onTemplates: () -> Unit,
     onExercises: () -> Unit,
     onHistory: () -> Unit,
-    onProgress: () -> Unit,
-    onImport: () -> Unit,
-    onExport: () -> Unit
+    onProgress: () -> Unit
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -465,8 +461,6 @@ private fun MenuScreen(
         MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
         MenuListRow("History", Icons.Outlined.History, onHistory)
         MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
-        MenuListRow("Import from Excel", Icons.Outlined.FileDownload, onImport)
-        MenuListRow("Export to Excel", Icons.Outlined.FileUpload, onExport)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Weight unit", modifier = Modifier.weight(1f))
             WeightUnit.entries.forEach { option ->
@@ -1093,11 +1087,22 @@ private fun ExercisePickerDialog(
 // ---------------------------------------------------------------- history
 
 @Composable
-private fun HistoryScreen(history: List<WorkoutLog>, numbers: Map<String, Int>, onOpen: (WorkoutLog) -> Unit, onDeleteAll: () -> Unit) {
+private fun HistoryScreen(
+    history: List<WorkoutLog>,
+    numbers: Map<String, Int>,
+    onOpen: (WorkoutLog) -> Unit,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
+    onDeleteAll: () -> Unit
+) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ScreenTitle("History")
         if (history.isEmpty()) Text("No finished workouts yet.")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onExport) { Text("Export") }
+            Button(onClick = onImport) { Text("Import") }
+        }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (history.isNotEmpty()) {
                 item {
