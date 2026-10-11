@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
@@ -88,7 +89,7 @@ private fun LeaderboardScreen(repository: RunHistoryRepository, settingsReposito
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
-            Text("Leaderboard", style = MaterialTheme.typography.headlineSmall)
+            Text("Leaderboard", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             Text(
                 "Real recorded splits where available; entries marked (est.) are approximated from " +
                     "the run's average pace instead (older runs, or ones without full GPS data).",

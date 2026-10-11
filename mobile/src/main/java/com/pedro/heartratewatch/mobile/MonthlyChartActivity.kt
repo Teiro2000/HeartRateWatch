@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
@@ -117,7 +118,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
-            Text("Monthly distance", style = MaterialTheme.typography.headlineSmall)
+            Text("Monthly Distance", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
 
             if (totals.isEmpty()) {
                 Text("No workouts recorded yet.")
