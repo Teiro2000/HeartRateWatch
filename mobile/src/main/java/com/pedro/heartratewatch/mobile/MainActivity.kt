@@ -733,7 +733,7 @@ private fun DashboardStatsRow(streakDays: Int, thisMonth: String, lastWorkout: S
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         StatItem("Streak", if (streakDays > 0) "$streakDays d" else "--")
         StatItem("This month", thisMonth)
-        StatItem("Last workout", lastWorkout)
+        StatItem("Last cardio session", lastWorkout)
     }
 }
 
@@ -754,7 +754,7 @@ private fun LiveRunStatsRow(state: LiveRunState.Snapshot, settings: TrainingSett
 }
 
 @Composable
-private fun StatItem(label: String, value: String) {
+internal fun StatItem(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

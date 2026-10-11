@@ -29,12 +29,17 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.text.DateFormat
+import java.util.Date
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
 
 /** Back to the Run/Workout picker from anywhere, clearing the screens stacked above it. */
@@ -98,6 +103,14 @@ fun MenuListRow(label: String, icon: ImageVector, onClick: () -> Unit) {
 @Composable
 private fun HomeScreen() {
     val context = LocalContext.current
+    // Streak and last workout cover everything: cardio sessions and gym workouts together.
+    val runs by remember { RunHistoryRepository(context.applicationContext).historyFlow }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val workouts by remember { WorkoutRepository(context.applicationContext).historyFlow }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val allStarts = runs.map { it.startedAtMillis } + workouts.map { it.startedAtMillis }
+    val streak = streakDays(allStarts)
+    val last = allStarts.maxOrNull()?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) } ?: "--"
     Scaffold { innerPadding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 24.dp),
@@ -105,6 +118,10 @@ private fun HomeScreen() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Pulse Guard", style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                StatItem("Streak", if (streak > 0) "$streak d" else "--")
+                StatItem("Last workout", last)
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 HomeTile("Cardio", Icons.AutoMirrored.Outlined.DirectionsRun, Modifier.weight(1f)) {
                     context.startActivity(Intent(context, MainActivity::class.java))
