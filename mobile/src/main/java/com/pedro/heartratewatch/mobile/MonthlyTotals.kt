@@ -61,14 +61,19 @@ fun thisMonthDistanceMeters(runs: List<RunSummary>): Double {
 }
 
 /** Consecutive calendar days with at least one workout, counting backward from the most recent
- * workout day (not necessarily today -- a day with no workout yet doesn't retroactively break a
- * streak that's still standing as of its last entry). */
+ * workout day. A streak is still alive if that day is today or yesterday (today isn't over yet, so
+ * no workout so far doesn't break it); once a whole day has passed without one it's back to 0. */
 fun currentStreakDays(runs: List<RunSummary>): Int = streakDays(runs.map { it.startedAtMillis })
 
 /** The same streak from bare start times, so cardio sessions and gym workouts can be counted together. */
-fun streakDays(startedAtMillis: List<Long>, zone: ZoneId = ZoneId.systemDefault()): Int {
+fun streakDays(
+    startedAtMillis: List<Long>,
+    zone: ZoneId = ZoneId.systemDefault(),
+    today: java.time.LocalDate = java.time.LocalDate.now(zone)
+): Int {
     if (startedAtMillis.isEmpty()) return 0
     val workoutDays = startedAtMillis.map { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.toSortedSet()
+    if (workoutDays.last() < today.minusDays(1)) return 0
     var streak = 1
     var day = workoutDays.last()
     while (workoutDays.contains(day.minusDays(1))) {
@@ -76,4 +81,19 @@ fun streakDays(startedAtMillis: List<Long>, zone: ZoneId = ZoneId.systemDefault(
         day = day.minusDays(1)
     }
     return streak
+}
+
+/**
+ * The streak a reminder should protect: the current streak length if it is alive but today has no
+ * workout yet, otherwise null (already satisfied today, or nothing to protect).
+ */
+fun streakAtRisk(
+    startedAtMillis: List<Long>,
+    zone: ZoneId = ZoneId.systemDefault(),
+    today: java.time.LocalDate = java.time.LocalDate.now(zone)
+): Int? {
+    val streak = streakDays(startedAtMillis, zone, today)
+    if (streak == 0) return null
+    val doneToday = startedAtMillis.any { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() == today }
+    return if (doneToday) null else streak
 }

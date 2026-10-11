@@ -334,9 +334,13 @@ class HeartRateTileService : TileService() {
                 else -> "${daysAgo}d"
             }
         } ?: "--"
+        // The stored streak is as of the last workout; once a whole day has passed without one it is over.
+        val zone = java.time.ZoneId.systemDefault()
+        val lastDay = stats.lastWorkoutMillis?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+        val streak = if (lastDay != null && lastDay >= java.time.LocalDate.now(zone).minusDays(1)) stats.streakDays else 0
         return LayoutElementBuilders.Row.Builder()
             .setWidth(expand())
-            .addContent(statColumn(if (stats.streakDays > 0) "${stats.streakDays}d" else "--", "Streak"))
+            .addContent(statColumn(if (streak > 0) "${streak}d" else "--", "Streak"))
             .addContent(statColumn(formatDistance(stats.thisMonthMeters.toFloat(), distanceUnit), "This month"))
             .addContent(statColumn(lastWorkout, "Last workout"))
             .build()
