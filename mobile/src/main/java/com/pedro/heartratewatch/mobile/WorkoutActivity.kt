@@ -364,6 +364,7 @@ private fun WorkoutApp(repository: WorkoutRepository) {
 
                 Screen.History -> HistoryScreen(
                     history = history,
+                    numbers = WorkoutExporter.numbering(history),
                     onOpen = { screen = Screen.HistoryDetail(it.id) },
                     onDeleteAll = { scope.launch { repository.deleteAllWorkouts() } }
                 )
@@ -1116,7 +1117,7 @@ private fun ExercisePickerDialog(
 // ---------------------------------------------------------------- history
 
 @Composable
-private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Unit, onDeleteAll: () -> Unit) {
+private fun HistoryScreen(history: List<WorkoutLog>, numbers: Map<String, Int>, onOpen: (WorkoutLog) -> Unit, onDeleteAll: () -> Unit) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ScreenTitle("History")
@@ -1134,7 +1135,7 @@ private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Uni
             items(history, key = { it.id }) { workout ->
                 OutlinedCard(modifier = Modifier.fillMaxWidth().clickable { onOpen(workout) }) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(workout.templateName, style = MaterialTheme.typography.titleMedium)
+                        Text(workoutHeading(workout, numbers.getValue(workout.id)), style = MaterialTheme.typography.titleMedium)
                         Text(formatDateTime(workout.startedAtMillis), style = MaterialTheme.typography.bodySmall)
                         Text(
                             "${workout.exercises.size} exercises, ${workout.exercises.sumOf { it.sets.size }} sets",
@@ -1169,7 +1170,7 @@ private fun HistoryDetailScreen(workout: WorkoutLog, number: Int, unit: WeightUn
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
         item {
             Column {
-                ScreenTitle(workout.templateName)
+                ScreenTitle(workoutHeading(workout, number))
                 Text(formatDateTime(workout.startedAtMillis), style = MaterialTheme.typography.bodySmall)
                 if (workout.note.isNotBlank()) {
                     Text("Notes: ${workout.note}", style = MaterialTheme.typography.bodySmall)
@@ -1248,6 +1249,17 @@ private fun recentTemplates(history: List<WorkoutLog>, templates: List<WorkoutTe
         if (result.size == limit) break
     }
     return result
+}
+
+/**
+ * How a finished workout is titled in History: just its number ("156"), plus the template's name
+ * ("157 | Day 3 - Deadlift") when it was started from one. Imported workouts and ones started
+ * without a template have only a generic name ("Workout 156"), which adds nothing.
+ */
+private fun workoutHeading(workout: WorkoutLog, number: Int): String {
+    val name = workout.templateName.trim()
+    val generic = name.isEmpty() || name.equals("Workout", ignoreCase = true) || Regex("""(?i)workout \d+""").matches(name)
+    return if (generic) "$number" else "$number | $name"
 }
 
 /**
