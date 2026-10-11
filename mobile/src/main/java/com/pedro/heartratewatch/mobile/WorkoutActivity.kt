@@ -529,6 +529,8 @@ private fun ActiveWorkoutScreen(
         onChange(workout.copy(exercises = workout.exercises.map { if (it.id == id) transform(it) else it }))
     }
 
+    val lastTemplateNote = remember(history, workout.templateId) { lastNoteForTemplate(history, workout.templateId) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -537,6 +539,17 @@ private fun ActiveWorkoutScreen(
             Column {
                 ScreenTitle(workout.templateName)
                 Text("Started ${formatDateTime(workout.startedAtMillis)}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        // The notes left on the previous workout from the same template, so they're in front of you at the start.
+        lastTemplateNote?.let { (previous, note) ->
+            item {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Notes from last time (${formatDate(previous.startedAtMillis)})", style = MaterialTheme.typography.titleSmall)
+                        Text(note, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
         }
         items(workout.exercises, key = { it.id }) { log ->
@@ -616,10 +629,15 @@ private fun ExerciseCard(
                 val (workout, previous) = lastTime
                 Column {
                     Text(
-                        "Last time (${formatDate(workout.startedAtMillis)}): ${summarizeSets(previous.sets, unit)}" +
-                            (previous.intensity?.let { " - ${it.label}" } ?: ""),
+                        "Last time (${formatDate(workout.startedAtMillis)}): ${summarizeSets(previous.sets, unit)}",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    previous.intensity?.let { intensity ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(modifier = Modifier.size(12.dp).background(intensity.color(), CircleShape))
+                            Text(intensity.label, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     if (previous.note.isNotBlank()) {
                         Text("Note: ${previous.note}", style = MaterialTheme.typography.bodySmall)
                     }
@@ -1230,6 +1248,16 @@ private fun recentTemplates(history: List<WorkoutLog>, templates: List<WorkoutTe
         if (result.size == limit) break
     }
     return result
+}
+
+/**
+ * The most recent finished workout started from template [templateId], paired with its workout note
+ * when it left one (null if there was no earlier workout, or it had no note).
+ */
+private fun lastNoteForTemplate(history: List<WorkoutLog>, templateId: String?): Pair<WorkoutLog, String>? {
+    if (templateId == null) return null
+    val previous = history.filter { it.templateId == templateId }.maxByOrNull { it.startedAtMillis } ?: return null
+    return previous.note.takeIf { it.isNotBlank() }?.let { previous to it }
 }
 
 /** Most recent finished workout that has real data (sets or a note) for this exercise. */
