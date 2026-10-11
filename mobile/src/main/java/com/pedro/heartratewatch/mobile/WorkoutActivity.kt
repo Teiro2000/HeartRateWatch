@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -713,6 +714,7 @@ private fun TemplatesScreen(
     // Delete is hidden until a template is held still for 1 second (see the hold detector below),
     // so it can't be hit by accident while scrolling or reordering.
     var revealedId by remember { mutableStateOf<String?>(null) }
+    var revealedAt by remember { mutableStateOf(0L) }
     val heights = remember { mutableMapOf<String, Int>() }
     val gap = with(LocalDensity.current) { 8.dp.toPx() }
     val haptics = LocalHapticFeedback.current
@@ -753,7 +755,11 @@ private fun TemplatesScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .fillMaxSize()
+            // A tap on empty space hides a revealed Delete button (taps on cards are handled by the cards).
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { revealedId = null }
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ScreenTitle("Templates")
@@ -805,11 +811,18 @@ private fun TemplatesScreen(
                             }
                             if (outcome == null && dragOffset == 0f) {   // timed out with the finger still: not a drag
                                 revealedId = template.id
+                                revealedAt = System.currentTimeMillis()
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             }
                         }
                     }
-                    .clickable { onEdit(template) }
+                    .clickable {
+                        // With a Delete button showing, a tap anywhere but on Delete just hides it. (A tap
+                        // landing within a moment of it appearing is the end of the hold itself -- the
+                        // finger lifting -- not a deliberate tap, so it's ignored.)
+                        if (revealedId == null) onEdit(template)
+                        else if (System.currentTimeMillis() - revealedAt > 400) revealedId = null
+                    }
             ) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
