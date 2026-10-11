@@ -445,11 +445,13 @@ private fun MenuScreen(
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenTitle("Workout")
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        ScreenTitle("Pulse Guard")
+        HorizontalDivider()
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             StatItem("Lifted this month", thisMonthVolume)
             StatItem("Last workout", lastWorkout)
         }
+        HorizontalDivider()
         if (active != null) {
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -470,6 +472,7 @@ private fun MenuScreen(
         MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
         MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
         MenuListRow("History", Icons.Outlined.History, onHistory)
+        HorizontalDivider()
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Weight unit", modifier = Modifier.weight(1f))
             WeightUnit.entries.forEach { option ->
@@ -480,6 +483,7 @@ private fun MenuScreen(
                 }
             }
         }
+        HorizontalDivider()
     }
     if (confirmDiscard) {
         ConfirmDialog(

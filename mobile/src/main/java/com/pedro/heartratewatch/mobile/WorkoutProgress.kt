@@ -45,11 +45,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 
-private enum class ProgressRange(val label: String, val days: Int?) {
-    THREE_MONTHS("3 months", 90),
-    ALL_TIME("All time", null)
-}
-
 /** One workout's result for the chosen exercise. Weights are in lb, like everything stored. */
 private data class ProgressPoint(
     val millis: Long,
@@ -108,7 +103,7 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var show1rm by remember { mutableStateOf(true) }
     var showTop by remember { mutableStateOf(true) }
-    var range by remember { mutableStateOf(ProgressRange.ALL_TIME) }
+    var range by remember { mutableStateOf<Pair<java.time.LocalDate, java.time.LocalDate>?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var selectedPoint by remember { mutableStateOf<Int?>(null) }
 
@@ -126,8 +121,12 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
         }
 
         val allPoints = buildPoints(history, effectiveId)
-        val cutoff = range.days?.let { System.currentTimeMillis() - it * 86_400_000L }
-        val points = if (cutoff == null) allPoints else allPoints.filter { it.millis >= cutoff }
+        val zone = java.time.ZoneId.systemDefault()
+        val points = range?.let { (from, to) ->
+            val start = from.atStartOfDay(zone).toInstant().toEpochMilli()
+            val end = to.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            allPoints.filter { it.millis in start until end }
+        } ?: allPoints
 
         item {
             Box {
@@ -165,15 +164,7 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProgressRange.entries.forEach { option ->
-                    FilterChip(
-                        selected = range == option,
-                        onClick = { range = option; selectedPoint = null },
-                        label = { Text(option.label) }
-                    )
-                }
-            }
+            DateRangeChips(range) { range = it; selectedPoint = null }
         }
 
         item {
