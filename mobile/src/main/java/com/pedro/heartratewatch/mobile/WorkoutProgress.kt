@@ -118,7 +118,7 @@ internal fun ProgressScreen(history: List<WorkoutLog>, unit: WeightUnit) {
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { ScreenTitle("Progress") }
+        item { ScreenTitle("Stats") }
 
         if (effectiveId == null) {
             item { Text("Finish a workout with some weighted sets and your progress will show up here.") }

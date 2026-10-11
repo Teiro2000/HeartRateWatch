@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -46,13 +50,20 @@ import java.util.Locale
 private val MONTH_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM yy")
 
 private enum class MonthRange(val label: String, val months: Int?) {
-    LAST_YEAR("12 months", 12),
+    LAST_3_MONTHS("3 months", 3),
     ALL_TIME("All time", null)
 }
 
+/** What the chart shows. More kinds of cardio will be added here as the app learns them. */
+private enum class CardioKind(val label: String) {
+    ALL("All cardio"),
+    RUN("Running"),
+    BIKE("Stationary bike")
+}
+
 /**
- * Line chart of total distance per month -- running, stationary biking, and the two combined --
- * in the same style as the workout Progress chart (see [LineChart]): toggle which lines to show,
+ * Line chart of total distance per month for one kind of cardio (running, stationary biking, or all of it) --
+ * in the same style as the workout Progress chart (see [LineChart]): pick the activity from a dropdown,
  * pick a range, tap a month for its numbers, and a ring marks every month that set a new record.
  * Built from run history (see [monthlyTotals]), so it grows automatically as workouts come in; the
  * export button writes the monthly totals as a spreadsheet-friendly CSV (always in km).
@@ -82,9 +93,8 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
     val totals = remember(runs) { monthlyTotals(runs) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var showRun by remember { mutableStateOf(true) }
-    var showBike by remember { mutableStateOf(true) }
-    var showTotal by remember { mutableStateOf(false) }
+    var kind by remember { mutableStateOf(CardioKind.RUN) }
+    var kindMenuOpen by remember { mutableStateOf(false) }
     var range by remember { mutableStateOf(MonthRange.ALL_TIME) }
     var selected by remember { mutableStateOf<Int?>(null) }
 
@@ -101,13 +111,6 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             snackbarHostState.showSnackbar(if (result.isSuccess) "Exported monthly totals" else "Export failed")
         }
     }
-
-    // Fixed, unrelated hues for the two activity lines (the Pip-Boy scheme is all shades of green,
-    // too close together to tell Running from Stationary bike at a glance); the combined line uses
-    // the theme's own accent.
-    val runColor = Color(0xFF4FA3F7)
-    val bikeColor = Color(0xFFF5A623)
-    val totalColor = MaterialTheme.colorScheme.primary
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
         Column(
@@ -130,15 +133,18 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
 
             val visible = if (range.months == null) totals else totals.takeLast(range.months!!)
 
-            // At least one line always stays on: a chart with none would just be empty.
-            fun toggle(current: Boolean, others: Boolean, set: (Boolean) -> Unit) {
-                if (!current || others) set(!current)
-                selected = null
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = showRun, onClick = { toggle(showRun, showBike || showTotal) { showRun = it } }, label = { Text("Running") })
-                FilterChip(selected = showBike, onClick = { toggle(showBike, showRun || showTotal) { showBike = it } }, label = { Text("Bike") })
-                FilterChip(selected = showTotal, onClick = { toggle(showTotal, showRun || showBike) { showTotal = it } }, label = { Text("Total") })
+            Box {
+                OutlinedButton(onClick = { kindMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(kind.label + "  v")
+                }
+                DropdownMenu(expanded = kindMenuOpen, onDismissRequest = { kindMenuOpen = false }) {
+                    CardioKind.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            onClick = { kind = option; selected = null; kindMenuOpen = false }
+                        )
+                    }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MonthRange.entries.forEach { option ->
@@ -168,11 +174,15 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                 return LineSeries(color, all.drop(offset), records(all).drop(offset))
             }
             val zone = remember { ZoneId.systemDefault() }
-            val lines = buildList {
-                if (showRun) add(series(runColor) { it.runMeters })
-                if (showBike) add(series(bikeColor) { it.bikeMeters })
-                if (showTotal) add(series(totalColor) { it.totalMeters })
-            }
+            val lines = listOf(
+                series(MaterialTheme.colorScheme.primary) {
+                    when (kind) {
+                        CardioKind.ALL -> it.totalMeters
+                        CardioKind.RUN -> it.runMeters
+                        CardioKind.BIKE -> it.bikeMeters
+                    }
+                }
+            )
             LineChart(
                 xMillis = visible.map { it.month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() },
                 series = lines,
@@ -183,9 +193,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (showRun) LegendDot(runColor, "Running")
-                if (showBike) LegendDot(bikeColor, "Bike")
-                if (showTotal) LegendDot(totalColor, "Total")
+                LegendDot(MaterialTheme.colorScheme.primary, kind.label)
                 Text("Ring = record month", style = MaterialTheme.typography.labelSmall)
             }
 

@@ -23,6 +23,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
@@ -217,9 +221,9 @@ private fun SettingsScreen(
             }
             HorizontalDivider()
 
-            MenuListRow("Leaderboard") { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
-            MenuListRow("Stats") { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
-            MenuListRow("History") { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
+            MenuListRow("Leaderboard", Icons.Outlined.EmojiEvents) { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
+            MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart) { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
+            MenuListRow("History", Icons.Outlined.History) { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
 
             HorizontalDivider()
             Row(

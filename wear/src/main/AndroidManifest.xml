@@ -130,7 +130,7 @@
 
         <!-- android:resource: the static thumbnail shown in the watch face's "Add tile" carousel
              while browsing, since actually invoking onTileRequest there isn't guaranteed to be
-             fast (or even supported) on every OS version. See drawable/tile_preview.xml. -->
+             fast (or even supported) on every OS version. See drawable/tile_preview.png. -->
         <service
             android:name=".tile.HeartRateTileService"
             android:label="@string/tile_label"

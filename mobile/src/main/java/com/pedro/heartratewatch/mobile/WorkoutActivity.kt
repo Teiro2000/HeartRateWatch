@@ -33,6 +33,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -449,12 +456,12 @@ private fun MenuScreen(
             }
         }
         Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start workout") }
-        MenuListRow("Templates", onTemplates)
-        MenuListRow("Exercises", onExercises)
-        MenuListRow("History", onHistory)
-        MenuListRow("Progress", onProgress)
-        MenuListRow("Import from Excel", onImport)
-        MenuListRow("Export to Excel", onExport)
+        MenuListRow("Templates", Icons.Outlined.ViewAgenda, onTemplates)
+        MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
+        MenuListRow("History", Icons.Outlined.History, onHistory)
+        MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
+        MenuListRow("Import from Excel", Icons.Outlined.FileDownload, onImport)
+        MenuListRow("Export to Excel", Icons.Outlined.FileUpload, onExport)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Weight unit", modifier = Modifier.weight(1f))
             WeightUnit.entries.forEach { option ->
