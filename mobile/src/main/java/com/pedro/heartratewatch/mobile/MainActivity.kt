@@ -217,9 +217,9 @@ private fun SettingsScreen(
             }
             HorizontalDivider()
 
-            MenuRow("Leaderboard") { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
-            MenuRow("Stats") { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
-            MenuRow("History") { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
+            MenuListRow("Leaderboard") { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
+            MenuListRow("Stats") { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
+            MenuListRow("History") { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
 
             HorizontalDivider()
             Row(
@@ -719,22 +719,6 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     ) {
         Text(label, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-/** One row in the top-level nav menu (Leaderboard/Stats/History). */
-@Composable
-private fun MenuRow(label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.titleMedium)
-        Text(">", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

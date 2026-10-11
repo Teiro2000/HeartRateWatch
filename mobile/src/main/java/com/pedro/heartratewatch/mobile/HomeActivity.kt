@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -64,9 +63,25 @@ fun rememberSystemBack(): () -> Unit {
  */
 @Composable
 fun NavButtons(onBack: (() -> Unit)?, onMainMenu: () -> Unit) {
-    Row {
-        if (onBack != null) TextButton(onClick = onBack) { Text("< Back") }
-        TextButton(onClick = onMainMenu) { Text("Main menu") }
+    // Two separate bordered buttons with a clear gap, so Back can't be mistaken for Main menu.
+    Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+        if (onBack != null) OutlinedButton(onClick = onBack) { Text("< Back") }
+        OutlinedButton(onClick = onMainMenu) { Text("Main menu") }
+    }
+}
+
+/** One row in a menu list (Cardio and Workout menus share it): label on the left, chevron on the right. */
+@Composable
+fun MenuListRow(label: String, onClick: () -> Unit) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            Text(">", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

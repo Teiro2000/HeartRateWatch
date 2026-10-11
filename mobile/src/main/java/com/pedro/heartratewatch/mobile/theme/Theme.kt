@@ -25,13 +25,29 @@ private val PipBoyBlack = Color(0xFF000000)
 private val PipBoyBlackContainer = Color(0xFF061109)
 private val PipBoyRed = Color(0xFFFF6B5F)
 
-// Light variant: same green accent family, but on a plain light surface instead of Pip-Boy black
-// -- this one's just for readability (bright rooms, outdoor glare), not a "light Pip-Boy" thing.
-private val PipBoyGreenDark = Color(0xFF1B4D33)
-private val PipBoyWhite = Color(0xFFFDFDFB)
-private val PipBoyWhiteContainer = Color(0xFFE3F3E8)
-private val PipBoyRedLight = Color(0xFFC62828)
+// Light mode is "Sage": warm paper, soft green, serif titles -- a calm daytime look rather than a
+// light Pip-Boy. Dark mode is "Terminal" (the Pip-Boy look above).
+private val SageGreen = Color(0xFF4F6B52)
+private val SagePaper = Color(0xFFF6F3EC)
+private val SageCard = Color(0xFFE9E3D4)
+private val SageInk = Color(0xFF2F3A2F)
+private val SageMuted = Color(0xFF6B6F63)
+private val SageOutline = Color(0xFFA9A28F)
+private val SageLine = Color(0xFFDDD6C6)
+private val SageRed = Color(0xFFC62828)
+private val TerminalLine = Color(0xFF1E6B3E)
 
+/** Sage: sans-serif body text with serif titles. */
+private fun Typography.serifTitles(): Typography = copy(
+    displayLarge = displayLarge.copy(fontFamily = FontFamily.Serif),
+    displayMedium = displayMedium.copy(fontFamily = FontFamily.Serif),
+    displaySmall = displaySmall.copy(fontFamily = FontFamily.Serif),
+    headlineLarge = headlineLarge.copy(fontFamily = FontFamily.Serif),
+    headlineMedium = headlineMedium.copy(fontFamily = FontFamily.Serif),
+    headlineSmall = headlineSmall.copy(fontFamily = FontFamily.Serif)
+)
+
+/** Terminal: monospace everywhere. */
 private fun Typography.monospaced(): Typography = copy(
     displayLarge = displayLarge.copy(fontFamily = FontFamily.Monospace),
     displayMedium = displayMedium.copy(fontFamily = FontFamily.Monospace),
@@ -63,27 +79,28 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
     // brightness regardless of the handful of roles actually listed here.
     val colorScheme = if (useLightTheme) {
         lightColorScheme(
-            primary = PipBoyGreenDark,
-            onPrimary = PipBoyWhite,
-            primaryContainer = PipBoyWhiteContainer,
-            onPrimaryContainer = PipBoyGreenDark,
-            secondary = PipBoyGreenDark,
-            onSecondary = PipBoyWhite,
-            secondaryContainer = PipBoyWhiteContainer,
-            onSecondaryContainer = PipBoyGreenDark,
-            tertiary = PipBoyGreenDark,
-            onTertiary = PipBoyWhite,
-            tertiaryContainer = PipBoyWhiteContainer,
-            onTertiaryContainer = PipBoyGreenDark,
-            background = PipBoyWhite,
-            onBackground = Color.Black,
-            surface = PipBoyWhite,
-            onSurface = Color.Black,
-            surfaceVariant = PipBoyWhiteContainer,
-            onSurfaceVariant = PipBoyGreenDark,
-            outline = PipBoyGreenDark,
-            error = PipBoyRedLight,
-            onError = PipBoyWhite
+            primary = SageGreen,
+            onPrimary = SagePaper,
+            primaryContainer = SageCard,
+            onPrimaryContainer = SageInk,
+            secondary = SageGreen,
+            onSecondary = SagePaper,
+            secondaryContainer = SageCard,
+            onSecondaryContainer = SageInk,
+            tertiary = SageGreen,
+            onTertiary = SagePaper,
+            tertiaryContainer = SageCard,
+            onTertiaryContainer = SageInk,
+            background = SagePaper,
+            onBackground = SageInk,
+            surface = SagePaper,
+            onSurface = SageInk,
+            surfaceVariant = SageCard,
+            onSurfaceVariant = SageMuted,
+            outline = SageOutline,
+            outlineVariant = SageLine,
+            error = SageRed,
+            onError = SagePaper
         )
     } else {
         darkColorScheme(
@@ -106,11 +123,13 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
             surfaceVariant = PipBoyBlackContainer,
             onSurfaceVariant = PipBoyGreenDim,
             outline = PipBoyGreenDim,
+            outlineVariant = TerminalLine,
             error = PipBoyRed,
             onError = PipBoyBlack
         )
     }
-    MaterialTheme(colorScheme = colorScheme, typography = MaterialTheme.typography.monospaced()) {
+    val typography = if (useLightTheme) MaterialTheme.typography.serifTitles() else MaterialTheme.typography.monospaced()
+    MaterialTheme(colorScheme = colorScheme, typography = typography) {
         Surface(color = colorScheme.background, content = content)
     }
 }
