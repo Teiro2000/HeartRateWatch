@@ -220,7 +220,7 @@ private fun RunRow(
                 }
                 Button(onClick = onDiscard) { Text("Discard") }
             }
-            if (isBike) Text("Stationary bike", style = MaterialTheme.typography.labelLarge)
+            Text(if (isBike) "Stationary bike" else "Run", style = MaterialTheme.typography.labelLarge)
             Text("Duration: %d:%02d".format(run.durationSeconds / 60, run.durationSeconds % 60))
             Text("Avg ${run.avgBpm} bpm, max ${run.maxBpm} bpm, min ${run.minBpm} bpm")
             if (isBike) {
