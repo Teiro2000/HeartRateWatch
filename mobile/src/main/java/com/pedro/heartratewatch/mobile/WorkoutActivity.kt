@@ -342,7 +342,6 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     templates = templates,
                     onNew = { screen = Screen.TemplateEdit(null) },
                     onEdit = { screen = Screen.TemplateEdit(it.id) },
-                    onDelete = { scope.launch { repository.deleteTemplate(it.id) } },
                     onReorder = { ids -> scope.launch { repository.reorderTemplates(ids) } }
                 )
 
@@ -353,6 +352,12 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     onSave = { template ->
                         scope.launch {
                             repository.saveTemplate(template)
+                            screen = Screen.Templates
+                        }
+                    },
+                    onDelete = { template ->
+                        scope.launch {
+                            repository.deleteTemplate(template.id)
                             screen = Screen.Templates
                         }
                     }
@@ -785,24 +790,14 @@ private fun TemplatesScreen(
     templates: List<WorkoutTemplate>,
     onNew: () -> Unit,
     onEdit: (WorkoutTemplate) -> Unit,
-    onDelete: (WorkoutTemplate) -> Unit,
     onReorder: (List<String>) -> Unit
 ) {
-    var pendingDelete by remember { mutableStateOf<WorkoutTemplate?>(null) }
-
     // Press and hold a template, then drag it up or down. The card just follows the finger while
     // dragging -- nothing else shifts -- and only when it's let go does it move to wherever it was
     // dropped, and the new order is saved. The list is reset from storage whenever that changes.
     var order by remember(templates) { mutableStateOf(templates) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
-    // Delete is hidden until a template is held still for 1 second (see the hold detector below),
-    // so it can't be hit by accident while scrolling or reordering.
-    var revealedId by remember { mutableStateOf<String?>(null) }
-    // True from the moment Delete is revealed until the finger that revealed it lifts: that lift
-    // arrives as a "tap" on the card and must not be mistaken for a tap that dismisses Delete.
-    var holdJustRevealed by remember { mutableStateOf(false) }
-    val holdSlopPx = with(LocalDensity.current) { 24.dp.toPx() }   // a real finger drifts a few dp over a second
     val heights = remember { mutableMapOf<String, Int>() }
     val gap = with(LocalDensity.current) { 8.dp.toPx() }
     val haptics = LocalHapticFeedback.current
@@ -845,10 +840,6 @@ private fun TemplatesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            // A tap on empty space hides a revealed Delete button (taps on cards are handled by the cards).
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                if (holdJustRevealed) holdJustRevealed = false else revealedId = null
-            }
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -857,7 +848,7 @@ private fun TemplatesScreen(
         if (templates.isEmpty()) {
             Text("No templates yet. Make one per workout day (leg day, shoulders...) to start workouts in one tap.")
         } else {
-            Text("Press, hold and drag a template, then let go where you want it. Hold one still for 1 second to show Delete.", style = MaterialTheme.typography.bodySmall)
+            Text("Press, hold and drag a template, then let go where you want it.", style = MaterialTheme.typography.bodySmall)
         }
         order.forEach { template ->
             val dragging = draggingId == template.id
@@ -883,60 +874,16 @@ private fun TemplatesScreen(
                             onDragCancel = { finishDrag() }
                         )
                     }
-                    .pointerInput(template.id to "hold") {
-                        // Watches the same press without taking it over: if the finger stays down and
-                        // doesn't move for 1 second, this template's Delete button appears. Moving
-                        // (dragging) or lifting earlier cancels it.
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            holdJustRevealed = false          // a fresh press is always deliberate
-                            if (revealedId != template.id) revealedId = null
-                            val outcome = withTimeoutOrNull(1_000) {
-                                var stillHeld = true
-                                while (stillHeld) {
-                                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
-                                    stillHeld = change != null && change.pressed &&
-                                        (change.position - down.position).getDistance() <= holdSlopPx
-                                }
-                                false
-                            }
-                            // Timed out with the finger down and (nearly) still: reveal Delete.
-                            if (outcome == null && kotlin.math.abs(dragOffset) < holdSlopPx) {
-                                revealedId = template.id
-                                holdJustRevealed = true
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                        }
-                    }
-                    .clickable {
-                        // With a Delete button showing, a tap anywhere but on Delete just hides it -- except
-                        // the tap that is just the hold that revealed it being let go, which is ignored once.
-                        when {
-                            revealedId == null -> onEdit(template)
-                            holdJustRevealed -> holdJustRevealed = false
-                            else -> revealedId = null
-                        }
-                    }
+                    .clickable { onEdit(template) }
             ) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(template.name, style = MaterialTheme.typography.titleMedium)
                         Text("${template.exerciseIds.size} exercises", style = MaterialTheme.typography.bodySmall)
                     }
-                    if (revealedId == template.id) {
-                        TextButton(onClick = { pendingDelete = template }) { Text("Delete") }
-                    }
                 }
             }
         }
-    }
-    pendingDelete?.let { template ->
-        ConfirmDialog(
-            text = "Delete the template \"${template.name}\"? Past workouts aren't affected.",
-            confirmLabel = "Delete",
-            onConfirm = { onDelete(template); pendingDelete = null; revealedId = null },
-            onDismiss = { pendingDelete = null; revealedId = null }
-        )
     }
 }
 
@@ -945,8 +892,10 @@ private fun TemplateEditScreen(
     existing: WorkoutTemplate?,
     exercises: List<Exercise>,
     onCreateExercise: suspend (String) -> Exercise,
-    onSave: (WorkoutTemplate) -> Unit
+    onSave: (WorkoutTemplate) -> Unit,
+    onDelete: (WorkoutTemplate) -> Unit
 ) {
+    var confirmDelete by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var ids by remember { mutableStateOf(existing?.exerciseIds.orEmpty()) }
     var showPicker by remember { mutableStateOf(false) }
@@ -988,9 +937,29 @@ private fun TemplateEditScreen(
                 onClick = {
                     onSave(WorkoutTemplate(existing?.id ?: WorkoutRepository.newId(), name.trim(), ids))
                 },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+                modifier = Modifier.fillMaxWidth()
             ) { Text("Save template") }
         }
+        item {
+            if (existing != null) {
+                OutlinedButton(
+                    onClick = { confirmDelete = true },
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+                ) { Text("Delete template", color = MaterialTheme.colorScheme.error) }
+            } else {
+                Box(modifier = Modifier.padding(bottom = 24.dp))
+            }
+        }
+    }
+
+    if (confirmDelete && existing != null) {
+        ConfirmDialog(
+            text = "Delete the template \"${existing.name}\"? Past workouts aren't affected.",
+            confirmLabel = "Delete",
+            onConfirm = { confirmDelete = false; onDelete(existing) },
+            onDismiss = { confirmDelete = false }
+        )
     }
 
     if (showPicker) {
