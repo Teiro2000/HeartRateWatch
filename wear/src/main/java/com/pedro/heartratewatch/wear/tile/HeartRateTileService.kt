@@ -93,14 +93,14 @@ class HeartRateTileService : TileService() {
             val bpm = state.currentBpm
             // No reading yet means no judgement either -- an arrow next to "--" would be misleading.
             val bpmStatus = if (bpm == null) null else heartRateStatus(bpm, settings, maxHrBpm)
+            // expand(), not the default wrap: the pace and distance columns below split this column's
+            // width between them, and a column only as wide as its contents leaves them almost none
+            // (which is what was clipping the digits).
             val readouts = LayoutElementBuilders.Column.Builder()
+                .setWidth(expand())
                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-                .addContent(valueText(bpm?.toString() ?: "--", statusColor(bpmStatus), BIG_SIZE_SP))
-                .addContent(
-                    statusArrow(bpmStatus).let { arrow ->
-                        smallLabel(if (arrow.isEmpty()) "bpm" else "$arrow bpm", color = if (arrow.isEmpty()) COLOR_GOOD else statusColor(bpmStatus))
-                    }
-                )
+                .addContent(valueText(statusArrow(bpmStatus), bpm?.toString() ?: "--", statusColor(bpmStatus), BIG_SIZE_SP))
+                .addContent(smallLabel("bpm"))
             if (isRun) {
                 val paceSec = state.currentPaceSecPerKm
                 val paceStatus = if (paceSec == null) null else paceStatus(paceSec, settings)
@@ -271,15 +271,29 @@ class HeartRateTileService : TileService() {
         else -> ""
     }
 
-    /** A bold number. */
-    private fun valueText(value: String, color: Int, sizeSp: Float): LayoutElementBuilders.Text =
-        LayoutElementBuilders.Text.Builder()
-            .setText(value)
-            .setFontStyle(
-                LayoutElementBuilders.FontStyle.Builder()
-                    .setSize(sp(sizeSp)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
+    /** A bold number, with a small up/down arrow beside it when the effort is off target. */
+    private fun valueText(arrow: String, value: String, color: Int, sizeSp: Float): LayoutElementBuilders.Row {
+        val row = LayoutElementBuilders.Row.Builder()
+            .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+        if (arrow.isNotEmpty()) {
+            row.addContent(
+                LayoutElementBuilders.Text.Builder()
+                    .setText("$arrow ")
+                    .setFontStyle(LayoutElementBuilders.FontStyle.Builder().setSize(sp(sizeSp * 0.45f)).setColor(argb(color)).build())
+                    .build()
             )
-            .build()
+        }
+        row.addContent(
+            LayoutElementBuilders.Text.Builder()
+                .setText(value)
+                .setFontStyle(
+                    LayoutElementBuilders.FontStyle.Builder()
+                        .setSize(sp(sizeSp)).setWeight(LayoutElementBuilders.FONT_WEIGHT_BOLD).setColor(argb(color)).build()
+                )
+                .build()
+        )
+        return row.build()
+    }
 
     /** A small caption under a number ("bpm", "pace /mi"). */
     private fun smallLabel(text: String, sizeSp: Float = LABEL_SIZE_SP, color: Int = COLOR_GOOD): LayoutElementBuilders.Text =
@@ -303,10 +317,8 @@ class HeartRateTileService : TileService() {
         LayoutElementBuilders.Column.Builder()
             .setWidth(weight(1f))
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
-            .addContent(valueText(value, color, valueSizeSp))
-            // The up/down arrow rides in the caption (in the status color) -- beside a big number
-            // it was clipping the digits.
-            .addContent(smallLabel(if (arrow.isEmpty()) label else "$arrow $label", labelSizeSp, if (arrow.isEmpty()) COLOR_GOOD else color))
+            .addContent(valueText(arrow, value, color, valueSizeSp))
+            .addContent(smallLabel(label, labelSizeSp))
             .build()
 
     /** Idle-state row: streak / this month / last workout, matching the phone home screen's own
@@ -337,7 +349,7 @@ class HeartRateTileService : TileService() {
     private companion object {
         // Bump whenever the layout changes -- resources (not the live data) are cached by
         // version, and this is what invalidates that cache.
-        const val RESOURCES_VERSION = "8"
+        const val RESOURCES_VERSION = "9"
         const val BIG_SIZE_SP = 38f
         const val MEDIUM_SIZE_SP = 20f
         const val LABEL_SIZE_SP = 11f
