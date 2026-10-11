@@ -35,7 +35,7 @@ fun goToMainMenu(context: Context) {
 }
 
 /**
- * What the app opens to: pick Run (the existing run-tracking screen, MainActivity) or Workout
+ * What the app opens to: pick Cardio (the existing run-tracking screen, MainActivity) or Workout
  * (the gym log, WorkoutActivity).
  */
 class HomeActivity : ComponentActivity() {
@@ -58,7 +58,7 @@ private fun HomeScreen() {
         ) {
             Text("Pulse Guard", style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                HomeTile("Run", Modifier.weight(1f)) {
+                HomeTile("Cardio", Modifier.weight(1f)) {
                     context.startActivity(Intent(context, MainActivity::class.java))
                 }
                 HomeTile("Workout", Modifier.weight(1f)) {
