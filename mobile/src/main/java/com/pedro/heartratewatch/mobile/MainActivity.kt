@@ -226,7 +226,7 @@ private fun SettingsScreen(
 
             MenuRow("Leaderboard") { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
             MenuRow("Stats") { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
-            MenuRow("Run History") { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
+            MenuRow("History") { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
 
             HorizontalDivider()
             Row(
@@ -732,7 +732,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     }
 }
 
-/** One row in the top-level nav menu (Leaderboard/Stats/Run History). */
+/** One row in the top-level nav menu (Leaderboard/Stats/History). */
 @Composable
 private fun MenuRow(label: String, onClick: () -> Unit) {
     Row(
