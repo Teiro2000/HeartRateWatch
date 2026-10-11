@@ -714,7 +714,10 @@ private fun TemplatesScreen(
     // Delete is hidden until a template is held still for 1 second (see the hold detector below),
     // so it can't be hit by accident while scrolling or reordering.
     var revealedId by remember { mutableStateOf<String?>(null) }
-    var revealedAt by remember { mutableStateOf(0L) }
+    // True from the moment Delete is revealed until the finger that revealed it lifts: that lift
+    // arrives as a "tap" on the card and must not be mistaken for a tap that dismisses Delete.
+    var holdJustRevealed by remember { mutableStateOf(false) }
+    val holdSlopPx = with(LocalDensity.current) { 24.dp.toPx() }   // a real finger drifts a few dp over a second
     val heights = remember { mutableMapOf<String, Int>() }
     val gap = with(LocalDensity.current) { 8.dp.toPx() }
     val haptics = LocalHapticFeedback.current
@@ -758,7 +761,9 @@ private fun TemplatesScreen(
         modifier = Modifier
             .fillMaxSize()
             // A tap on empty space hides a revealed Delete button (taps on cards are handled by the cards).
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { revealedId = null }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                if (holdJustRevealed) holdJustRevealed = false else revealedId = null
+            }
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -799,29 +804,33 @@ private fun TemplatesScreen(
                         // (dragging) or lifting earlier cancels it.
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
+                            holdJustRevealed = false          // a fresh press is always deliberate
                             if (revealedId != template.id) revealedId = null
                             val outcome = withTimeoutOrNull(1_000) {
                                 var stillHeld = true
                                 while (stillHeld) {
                                     val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
                                     stillHeld = change != null && change.pressed &&
-                                        (change.position - down.position).getDistance() <= viewConfiguration.touchSlop
+                                        (change.position - down.position).getDistance() <= holdSlopPx
                                 }
                                 false
                             }
-                            if (outcome == null && dragOffset == 0f) {   // timed out with the finger still: not a drag
+                            // Timed out with the finger down and (nearly) still: reveal Delete.
+                            if (outcome == null && kotlin.math.abs(dragOffset) < holdSlopPx) {
                                 revealedId = template.id
-                                revealedAt = System.currentTimeMillis()
+                                holdJustRevealed = true
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             }
                         }
                     }
                     .clickable {
-                        // With a Delete button showing, a tap anywhere but on Delete just hides it. (A tap
-                        // landing within a moment of it appearing is the end of the hold itself -- the
-                        // finger lifting -- not a deliberate tap, so it's ignored.)
-                        if (revealedId == null) onEdit(template)
-                        else if (System.currentTimeMillis() - revealedAt > 400) revealedId = null
+                        // With a Delete button showing, a tap anywhere but on Delete just hides it -- except
+                        // the tap that is just the hold that revealed it being let go, which is ignored once.
+                        when {
+                            revealedId == null -> onEdit(template)
+                            holdJustRevealed -> holdJustRevealed = false
+                            else -> revealedId = null
+                        }
                     }
             ) {
                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
