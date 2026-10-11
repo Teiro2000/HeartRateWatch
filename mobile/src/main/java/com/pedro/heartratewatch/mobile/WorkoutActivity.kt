@@ -356,7 +356,11 @@ private fun WorkoutApp(repository: WorkoutRepository) {
 
                 Screen.Progress -> ProgressScreen(history = history, unit = unit)
 
-                Screen.History -> HistoryScreen(history = history, onOpen = { screen = Screen.HistoryDetail(it.id) })
+                Screen.History -> HistoryScreen(
+                    history = history,
+                    onOpen = { screen = Screen.HistoryDetail(it.id) },
+                    onDeleteAll = { scope.launch { repository.deleteAllWorkouts() } }
+                )
 
                 is Screen.HistoryDetail -> {
                     val workout = history.firstOrNull { it.id == current.id }
@@ -1053,7 +1057,8 @@ private fun ExercisePickerDialog(
 // ---------------------------------------------------------------- history
 
 @Composable
-private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Unit) {
+private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Unit, onDeleteAll: () -> Unit) {
+    var confirmDeleteAll by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ScreenTitle("History")
         if (history.isEmpty()) Text("No finished workouts yet.")
@@ -1070,7 +1075,24 @@ private fun HistoryScreen(history: List<WorkoutLog>, onOpen: (WorkoutLog) -> Uni
                     }
                 }
             }
+            if (history.isNotEmpty()) {
+                item {
+                    OutlinedButton(
+                        onClick = { confirmDeleteAll = true },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                    ) { Text("Remove all workouts", color = MaterialTheme.colorScheme.error) }
+                }
+            }
         }
+    }
+    if (confirmDeleteAll) {
+        ConfirmDialog(
+            text = "Are you sure you want to remove all ${history.size} workouts? This can't be undone.",
+            confirmLabel = "Remove all",
+            onConfirm = { confirmDeleteAll = false; onDeleteAll() },
+            onDismiss = { confirmDeleteAll = false }
+        )
     }
 }
 
