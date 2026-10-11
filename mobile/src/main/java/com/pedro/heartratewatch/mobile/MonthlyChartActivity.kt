@@ -49,11 +49,6 @@ import java.util.Locale
 
 private val MONTH_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM yy")
 
-private enum class MonthRange(val label: String, val months: Int?) {
-    LAST_3_MONTHS("3 months", 3),
-    ALL_TIME("All time", null)
-}
-
 /** What the chart shows. More kinds of cardio will be added here as the app learns them. */
 private enum class CardioKind(val label: String) {
     ALL("All cardio"),
@@ -95,7 +90,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
 
     var kind by remember { mutableStateOf(CardioKind.RUN) }
     var kindMenuOpen by remember { mutableStateOf(false) }
-    var range by remember { mutableStateOf(MonthRange.ALL_TIME) }
+    var range by remember { mutableStateOf<Pair<java.time.LocalDate, java.time.LocalDate>?>(null) }
     var selected by remember { mutableStateOf<Int?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -131,7 +126,9 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
 
             fun display(meters: Double) = meters / unit.metersPerUnit
 
-            val visible = if (range.months == null) totals else totals.takeLast(range.months!!)
+            val visible = range?.let { (from, to) ->
+                totals.filter { it.month >= java.time.YearMonth.from(from) && it.month <= java.time.YearMonth.from(to) }
+            } ?: totals
 
             Box {
                 OutlinedButton(onClick = { kindMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
@@ -146,15 +143,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MonthRange.entries.forEach { option ->
-                    FilterChip(
-                        selected = range == option,
-                        onClick = { range = option; selected = null },
-                        label = { Text(option.label) }
-                    )
-                }
-            }
+            DateRangeChips(range) { range = it; selected = null }
 
             // A ring marks each month that beat every earlier month for that line (the first
             // month is only a baseline), judged against all-time history even when a range hides
@@ -168,10 +157,10 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                 }
                 return flags
             }
-            val offset = totals.size - visible.size
+            val offset = visible.firstOrNull()?.let { totals.indexOf(it) } ?: 0
             fun series(color: Color, pick: (MonthTotal) -> Double): LineSeries {
                 val all = totals.map { display(pick(it)) }
-                return LineSeries(color, all.drop(offset), records(all).drop(offset))
+                return LineSeries(color, all.drop(offset).take(visible.size), records(all).drop(offset).take(visible.size))
             }
             val zone = remember { ZoneId.systemDefault() }
             val lines = listOf(
@@ -183,6 +172,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                     }
                 }
             )
+            if (visible.isEmpty()) Text("No workouts in that range.") else {
             LineChart(
                 xMillis = visible.map { it.month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() },
                 series = lines,
@@ -206,6 +196,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                         Text("Total: %.1f %s".format(display(month.totalMeters), unit.symbol), style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
             }
 
             Text("Totals", style = MaterialTheme.typography.titleMedium)

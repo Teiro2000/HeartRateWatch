@@ -1,6 +1,16 @@
 package com.pedro.heartratewatch.mobile
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalContext
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +40,39 @@ import kotlin.math.abs
 
 /** One line on a [LineChart]: a value per x position, and which of them get a ring around the dot. */
 internal class LineSeries(val color: Color, val values: List<Double>, val ringed: List<Boolean>)
+
+/**
+ * "Custom range" and "All time" chips for the Stats screens. Tapping Custom range asks for a start
+ * date and then an end date; [range] null means all time.
+ */
+@Composable
+internal fun DateRangeChips(range: Pair<LocalDate, LocalDate>?, onChange: (Pair<LocalDate, LocalDate>?) -> Unit) {
+    val context = LocalContext.current
+    val format = remember { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM) }
+
+    fun pickDate(initial: LocalDate, minimum: LocalDate?, onPicked: (LocalDate) -> Unit) {
+        val dialog = DatePickerDialog(
+            context,
+            { _, year, month, day -> onPicked(LocalDate.of(year, month + 1, day)) },
+            initial.year, initial.monthValue - 1, initial.dayOfMonth
+        )
+        minimum?.let { dialog.datePicker.minDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
+        dialog.show()
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = range != null,
+            onClick = {
+                pickDate(range?.first ?: LocalDate.now().minusMonths(3), null) { start ->
+                    pickDate(maxOf(start, range?.second ?: LocalDate.now()), start) { end -> onChange(start to end) }
+                }
+            },
+            label = { Text(range?.let { "${it.first.format(format)} - ${it.second.format(format)}" } ?: "Custom range") }
+        )
+        FilterChip(selected = range == null, onClick = { onChange(null) }, label = { Text("All time") })
+    }
+}
 
 private const val LEFT_PAD_DP = 44f
 private const val RIGHT_PAD_DP = 12f
