@@ -53,6 +53,8 @@ import com.pedro.heartratewatch.shared.TrainingSettings
 import com.pedro.heartratewatch.shared.formatDistance
 import com.pedro.heartratewatch.shared.formatPace
 import com.pedro.heartratewatch.shared.formatSpeed
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -89,7 +91,13 @@ private fun RunHistoryScreen(
     // Whatever the distance-target goal is currently set to (Settings -> halfway/target alerts) --
     // a run that met or beat it gets a star in the list below, regardless of what the target was
     // when that run actually happened.
-    val distanceTarget = settings.distanceTargetMeters
+    // Each activity has its own target, so a run is judged against running's and a stationary bike
+    // ride (once its distance is typed in) against the stationary bike's.
+    val targets by remember {
+        combine(ActivityType.entries.map { type -> settingsRepository.settingsFlow(type).map { type to it.distanceTargetMeters } }) {
+            it.toMap()
+        }
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
     val snackbarHostState = remember { SnackbarHostState() }
     var editingDistanceFor by remember { mutableStateOf<RunSummary?>(null) }
     var editingPackWeightFor by remember { mutableStateOf<RunSummary?>(null) }
@@ -201,7 +209,7 @@ private fun RunHistoryScreen(
                     items(runs, key = { it.startedAtMillis }) { run ->
                         RunRow(
                             run,
-                            reachedTarget = distanceTarget != null && run.distanceMeters >= distanceTarget,
+                            reachedTarget = targets[run.activityType]?.let { run.distanceMeters >= it } == true,
                             paceUnit = settings.paceUnit,
                             distanceUnit = settings.distanceUnit,
                             onEditDistance = { editingDistanceFor = run },

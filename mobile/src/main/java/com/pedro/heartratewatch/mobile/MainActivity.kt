@@ -267,6 +267,21 @@ private fun SettingsScreen(
                     info = "For this long after you start, you won't get low heart rate or pace too slow alerts.",
                     onChange = { draft = draft.copy(warmupSeconds = it) }
                 )
+                // The next two follow the activity picked above. The target applies to every
+                // activity, including the stationary bike (it just earns a star in History).
+                DistanceUnitField(
+                    "Distance target (optional, 0 = none)",
+                    draft.distanceTargetMeters,
+                    unit = targetDistanceUnit,
+                    onUnitChange = { draft = draft.copy(distanceUnit = it) },
+                    onMetersChange = { draft = draft.copy(distanceTargetMeters = it) }
+                )
+                SwitchRow(
+                    "Launch Strava once you start a session (if installed on watch)",
+                    draft.launchStravaOnStart
+                ) {
+                    draft = draft.copy(launchStravaOnStart = it)
+                }
             }
 
             AccordionSection(
@@ -387,34 +402,6 @@ private fun SettingsScreen(
                 }
             }
 
-            AccordionSection(
-                "Target",
-                expanded = expandedInnerSection == "Target",
-                onToggle = { expandedInnerSection = if (expandedInnerSection == "Target") null else "Target" }
-            ) {
-                DistanceUnitField(
-                    "Distance target (optional, 0 = none)",
-                    draft.distanceTargetMeters,
-                    unit = targetDistanceUnit,
-                    onUnitChange = { draft = draft.copy(distanceUnit = it) },
-                    onMetersChange = { draft = draft.copy(distanceTargetMeters = it) }
-                )
-            }
-
-            }
-
-            AccordionSection(
-                "Strava",
-                expanded = expandedInnerSection == "Strava",
-                onToggle = { expandedInnerSection = if (expandedInnerSection == "Strava") null else "Strava" }
-            ) {
-                // Per activity: the picker above chooses which one this is for.
-                SwitchRow(
-                    "Launch Strava once you start a session (if installed on watch)",
-                    draft.launchStravaOnStart
-                ) {
-                    draft = draft.copy(launchStravaOnStart = it)
-                }
             }
         }
     }
