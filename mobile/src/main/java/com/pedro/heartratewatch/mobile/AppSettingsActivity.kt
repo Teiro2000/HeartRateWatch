@@ -20,7 +20,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.pedro.heartratewatch.shared.AlertType
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,17 +46,22 @@ class AppSettingsActivity : ComponentActivity() {
 
     private val themePreferenceRepository by lazy { ThemePreferenceRepository(applicationContext) }
     private val reminderRepository by lazy { StreakReminderRepository(applicationContext) }
+    private val alertPlayer by lazy { AlertPlayer(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            PipBoyTheme { AppSettingsScreen(themePreferenceRepository, reminderRepository) }
+            PipBoyTheme { AppSettingsScreen(themePreferenceRepository, reminderRepository, alertPlayer) }
         }
     }
 }
 
 @Composable
-private fun AppSettingsScreen(themePreferenceRepository: ThemePreferenceRepository, reminderRepository: StreakReminderRepository) {
+private fun AppSettingsScreen(
+    themePreferenceRepository: ThemePreferenceRepository,
+    reminderRepository: StreakReminderRepository,
+    alertPlayer: AlertPlayer
+) {
     val scope = rememberCoroutineScope()
     val useLightTheme by themePreferenceRepository.useLightThemeFlow.collectAsStateWithLifecycle(initialValue = false)
     val back = rememberSystemBack()
@@ -62,7 +73,7 @@ private fun AppSettingsScreen(themePreferenceRepository: ThemePreferenceReposito
     }
     Scaffold { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             TextButton(onClick = back) { Text("< Back") }
@@ -105,6 +116,27 @@ private fun AppSettingsScreen(themePreferenceRepository: ThemePreferenceReposito
                         }
                     }
                 )
+            }
+            var soundsOpen by remember { mutableStateOf(false) }
+            val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
+            AccordionSection(
+                "Custom sounds (cardio)",
+                expanded = soundsOpen,
+                onToggle = { soundsOpen = !soundsOpen }
+            ) {
+                Text(
+                    "The sounds your phone plays for cardio alerts: heart rate, pace and distance. They apply to every cardio activity.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                AlertType.entries.forEach { type ->
+                    AlertSoundRow(
+                        label = type.soundPickerLabel(),
+                        initialDb = alertPlayer.volumeDb(type),
+                        onChoose = { soundPickers.getValue(type).launch(SUPPORTED_AUDIO_MIME_TYPES) },
+                        onTest = { alertPlayer.playNow(type) },
+                        onVolumeChange = { alertPlayer.setVolumeDb(type, it) }
+                    )
+                }
             }
             if (reminder.enabled) {
                 Row(

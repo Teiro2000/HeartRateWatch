@@ -98,7 +98,7 @@ import kotlin.math.roundToInt
  * expanding the wildcard, so the common audio formats are spelled out explicitly to make sure
  * mp3/m4a/ogg/flac files actually show up, not just wav.
  */
-private val SUPPORTED_AUDIO_MIME_TYPES = arrayOf(
+internal val SUPPORTED_AUDIO_MIME_TYPES = arrayOf(
     "audio/*",
     "audio/wav",
     "audio/x-wav",
@@ -116,7 +116,6 @@ private val SUPPORTED_AUDIO_MIME_TYPES = arrayOf(
 class MainActivity : ComponentActivity() {
 
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
-    private val alertPlayer by lazy { AlertPlayer(applicationContext) }
     private val calibrationRepository by lazy { CalibrationRepository(applicationContext) }
     private val runHistoryRepository by lazy { RunHistoryRepository(applicationContext) }
 
@@ -139,7 +138,6 @@ class MainActivity : ComponentActivity() {
             PipBoyTheme {
                 SettingsScreen(
                     settingsRepository,
-                    alertPlayer,
                     calibrationRepository,
                     runHistoryRepository
                 )
@@ -156,7 +154,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SettingsScreen(
     repository: SettingsRepository,
-    alertPlayer: AlertPlayer,
     calibrationRepository: CalibrationRepository,
     runHistoryRepository: RunHistoryRepository
 ) {
@@ -191,11 +188,6 @@ private fun SettingsScreen(
         delay(500)
         repository.save(selectedActivity, draft)
     }
-
-    // AlertType.entries is fixed at compile time, so looping over it to register one launcher
-    // per type (rather than the six near-identical named vals this used to be) is safe -- same
-    // reasoning as ExercisePickerActivity's ActivityType.entries.forEach.
-    val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
 
     // Settings itself starts collapsed (see the "Settings" header below); which single accordion
     // is open inside it is tracked here rather than by each AccordionSection independently, so
@@ -275,12 +267,6 @@ private fun SettingsScreen(
                     info = "For this long after you start, you won't get low heart rate or pace too slow alerts.",
                     onChange = { draft = draft.copy(warmupSeconds = it) }
                 )
-                SwitchRow(
-                    "Launch Strava once you start a session (if installed on watch)",
-                    draft.launchStravaOnStart
-                ) {
-                    draft = draft.copy(launchStravaOnStart = it)
-                }
             }
 
             AccordionSection(
@@ -418,20 +404,16 @@ private fun SettingsScreen(
             }
 
             AccordionSection(
-                "Custom sounds",
-                expanded = expandedInnerSection == "Custom sounds",
-                onToggle = {
-                    expandedInnerSection = if (expandedInnerSection == "Custom sounds") null else "Custom sounds"
-                }
+                "Strava",
+                expanded = expandedInnerSection == "Strava",
+                onToggle = { expandedInnerSection = if (expandedInnerSection == "Strava") null else "Strava" }
             ) {
-                AlertType.entries.forEach { type ->
-                    AlertSoundRow(
-                        label = type.soundPickerLabel(),
-                        initialDb = alertPlayer.volumeDb(type),
-                        onChoose = { soundPickers.getValue(type).launch(SUPPORTED_AUDIO_MIME_TYPES) },
-                        onTest = { alertPlayer.playNow(type) },
-                        onVolumeChange = { alertPlayer.setVolumeDb(type, it) }
-                    )
+                // Per activity: the picker above chooses which one this is for.
+                SwitchRow(
+                    "Launch Strava once you start a session (if installed on watch)",
+                    draft.launchStravaOnStart
+                ) {
+                    draft = draft.copy(launchStravaOnStart = it)
                 }
             }
         }
@@ -445,7 +427,7 @@ private fun SettingsScreen(
  * of them stacking up independently.
  */
 @Composable
-private fun AccordionSection(
+internal fun AccordionSection(
     title: String,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -478,14 +460,14 @@ private fun AccordionSection(
 
 /** A document picker pre-wired to save whatever audio file the user picks as `type`'s alert sound. */
 @Composable
-private fun rememberSoundPicker(type: AlertType, alertPlayer: AlertPlayer) =
+internal fun rememberSoundPicker(type: AlertType, alertPlayer: AlertPlayer) =
     rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let { alertPlayer.setCustomSound(type, it) }
     }
 
 /** One alert's controls: pick a sound, test it (at its current volume), and set its loudness. */
 @Composable
-private fun AlertSoundRow(
+internal fun AlertSoundRow(
     label: String,
     initialDb: Int,
     onChoose: () -> Unit,
@@ -517,7 +499,7 @@ private fun AlertSoundRow(
 
 /** Button label for the "Custom sounds" picker list -- kept out of :shared since it's UI text,
  * not a model concern (same reasoning as ActivityType.displayName() on :wear). */
-private fun AlertType.soundPickerLabel(): String = when (this) {
+internal fun AlertType.soundPickerLabel(): String = when (this) {
     AlertType.LOW_HR -> "Push-harder alert (heart rate)"
     AlertType.HIGH_HR -> "Break alert (heart rate)"
     AlertType.PACE_TOO_SLOW -> "Push-harder alert (pace)"
