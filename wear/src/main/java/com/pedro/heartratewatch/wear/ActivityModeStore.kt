@@ -38,4 +38,13 @@ class ActivityModeStore(private val context: Context) {
 fun ActivityType.displayName(): String = when (this) {
     ActivityType.RUN -> "Running"
     ActivityType.STATIONARY_BIKE -> "Stationary bike"
+    ActivityType.WALK -> "Walking"
+    ActivityType.BIKE -> "Biking"
+}
+
+/** Label for the Stop button while this kind of session is running. */
+fun ActivityType.stopLabel(): String = when (this) {
+    ActivityType.RUN -> "Stop run"
+    ActivityType.WALK -> "Stop walk"
+    ActivityType.STATIONARY_BIKE, ActivityType.BIKE -> "Stop ride"
 }

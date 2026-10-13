@@ -66,6 +66,13 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
 import com.pedro.heartratewatch.shared.ActivityType
+import com.pedro.heartratewatch.shared.defaultSettingsFor
+import com.pedro.heartratewatch.shared.formatSpeed
+import com.pedro.heartratewatch.shared.paceFromSpeedKmh
+import com.pedro.heartratewatch.shared.speedInUnit
+import com.pedro.heartratewatch.shared.speedKmhFromPace
+import com.pedro.heartratewatch.shared.speedKmhFromUnit
+import com.pedro.heartratewatch.shared.speedUnitLabel
 import com.pedro.heartratewatch.shared.AlertType
 import com.pedro.heartratewatch.shared.DataLayerPaths
 import com.pedro.heartratewatch.shared.DistanceUnit
@@ -152,7 +159,10 @@ private fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val saved by repository.settingsFlow.collectAsStateWithLifecycle(initialValue = TrainingSettings())
+    // Heart rate / pace / target settings are kept per activity; this picks which one the sections below edit.
+    var selectedActivity by remember { mutableStateOf(ActivityType.RUN) }
+    val saved by remember(selectedActivity) { repository.settingsFlow(selectedActivity) }
+        .collectAsStateWithLifecycle(initialValue = defaultSettingsFor(selectedActivity))
     val latestCalibration by calibrationRepository.latestFlow.collectAsStateWithLifecycle(initialValue = null)
     val runs by runHistoryRepository.historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val liveRun by LiveRunState.state.collectAsStateWithLifecycle()
@@ -176,7 +186,7 @@ private fun SettingsScreen(
     LaunchedEffect(draft) {
         if (draft == saved) return@LaunchedEffect
         delay(500)
-        repository.save(draft)
+        repository.save(selectedActivity, draft)
     }
 
     // AlertType.entries is fixed at compile time, so looping over it to register one launcher
@@ -267,6 +277,8 @@ private fun SettingsScreen(
                 }
             }
 
+            ActivityPickerRow(selectedActivity) { selectedActivity = it }
+
             AccordionSection(
                 "Heart rate",
                 expanded = expandedInnerSection == "Heart rate",
@@ -328,12 +340,13 @@ private fun SettingsScreen(
                 }
             }
 
+            if (selectedActivity.usesGps) {
             AccordionSection(
                 "Pace",
                 expanded = expandedInnerSection == "Pace",
                 onToggle = { expandedInnerSection = if (expandedInnerSection == "Pace") null else "Pace" }
             ) {
-                SwitchRow("Enable pace alerts", draft.paceAlertsEnabled) {
+                SwitchRow(if (selectedActivity.showsSpeed) "Enable speed alerts" else "Enable pace alerts", draft.paceAlertsEnabled) {
                     draft = draft.copy(paceAlertsEnabled = it)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -344,26 +357,44 @@ private fun SettingsScreen(
                         onSelect = { draft = draft.copy(paceUnit = it) }
                     )
                 }
-                val fastestSecPerUnit = (draft.fastestPaceSecPerKm * (paceUnit.metersPerUnit / 1000.0)).roundToInt()
-                PaceField(
-                    "Fastest allowed pace (per ${paceUnit.symbol})",
-                    fastestSecPerUnit,
-                    onChange = { enteredSecPerUnit ->
-                        draft = draft.copy(
-                            fastestPaceSecPerKm = (enteredSecPerUnit * (1000.0 / paceUnit.metersPerUnit)).roundToInt()
-                        )
-                    }
-                )
-                val slowestSecPerUnit = (draft.slowestPaceSecPerKm * (paceUnit.metersPerUnit / 1000.0)).roundToInt()
-                PaceField(
-                    "Slowest allowed pace (per ${paceUnit.symbol})",
-                    slowestSecPerUnit,
-                    onChange = { enteredSecPerUnit ->
-                        draft = draft.copy(
-                            slowestPaceSecPerKm = (enteredSecPerUnit * (1000.0 / paceUnit.metersPerUnit)).roundToInt()
-                        )
-                    }
-                )
+                if (selectedActivity.showsSpeed) {
+                    // A bike is measured in km/h or mph; the limits are still stored as pace internally.
+                    SpeedField(
+                        "Slowest allowed speed (${speedUnitLabel(paceUnit)})",
+                        draft.slowestPaceSecPerKm,
+                        paceUnit,
+                        resetKey = selectedActivity,
+                        onChange = { draft = draft.copy(slowestPaceSecPerKm = it) }
+                    )
+                    SpeedField(
+                        "Fastest allowed speed (${speedUnitLabel(paceUnit)})",
+                        draft.fastestPaceSecPerKm,
+                        paceUnit,
+                        resetKey = selectedActivity,
+                        onChange = { draft = draft.copy(fastestPaceSecPerKm = it) }
+                    )
+                } else {
+                    val fastestSecPerUnit = (draft.fastestPaceSecPerKm * (paceUnit.metersPerUnit / 1000.0)).roundToInt()
+                    PaceField(
+                        "Fastest allowed pace (per ${paceUnit.symbol})",
+                        fastestSecPerUnit,
+                        onChange = { enteredSecPerUnit ->
+                            draft = draft.copy(
+                                fastestPaceSecPerKm = (enteredSecPerUnit * (1000.0 / paceUnit.metersPerUnit)).roundToInt()
+                            )
+                        }
+                    )
+                    val slowestSecPerUnit = (draft.slowestPaceSecPerKm * (paceUnit.metersPerUnit / 1000.0)).roundToInt()
+                    PaceField(
+                        "Slowest allowed pace (per ${paceUnit.symbol})",
+                        slowestSecPerUnit,
+                        onChange = { enteredSecPerUnit ->
+                            draft = draft.copy(
+                                slowestPaceSecPerKm = (enteredSecPerUnit * (1000.0 / paceUnit.metersPerUnit)).roundToInt()
+                            )
+                        }
+                    )
+                }
             }
 
             AccordionSection(
@@ -378,6 +409,8 @@ private fun SettingsScreen(
                     onUnitChange = { draft = draft.copy(distanceUnit = it) },
                     onMetersChange = { draft = draft.copy(distanceTargetMeters = it) }
                 )
+            }
+
             }
 
             AccordionSection(
@@ -487,6 +520,62 @@ private fun AlertType.soundPickerLabel(): String = when (this) {
     AlertType.PACE_TOO_FAST -> "Ease-up alert (pace)"
     AlertType.TARGET_REACHED -> "Target-reached alert"
     AlertType.HALFWAY -> "Halfway-there alert"
+}
+
+/** "Heart rate, pace and target settings for: [Running v]" -- which activity the sections below edit. */
+@Composable
+private fun ActivityPickerRow(selected: ActivityType, onSelect: (ActivityType) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Settings below are saved separately for each activity:", style = MaterialTheme.typography.bodySmall)
+        Box {
+            OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(selected.displayName() + "  v")
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                ACTIVITY_ORDER.forEach { type ->
+                    DropdownMenuItem(
+                        text = { Text(type.displayName()) },
+                        onClick = { onSelect(type); open = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A speed limit entered in km/h or mph, converted to/from the pace (seconds per km) stored for it.
+ * Holds its own text so a value like "25.5" isn't rewritten to the rounded-trip "25.53" while typing.
+ */
+@Composable
+private fun SpeedField(label: String, secPerKm: Int, unit: DistanceUnit, resetKey: Any, onChange: (Int) -> Unit) {
+    fun shown(sec: Int) = formatDecimal(speedInUnit(speedKmhFromPace(sec), unit).toFloat())
+    var text by remember(resetKey, unit) { mutableStateOf(shown(secPerKm)) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    OutlinedTextField(
+        value = text,
+        onValueChange = { typed ->
+            var seenDot = false
+            val filtered = buildString {
+                for (c in typed) {
+                    if (c.isDigit()) append(c) else if (c == '.' && !seenDot) { append(c); seenDot = true }
+                }
+            }
+            text = filtered
+            val speed = filtered.toDoubleOrNull()
+            if (speed != null && speed > 0.0) onChange(paceFromSpeedKmh(speedKmhFromUnit(speed, unit)))
+        },
+        label = { Text(label) },
+        isError = text.toDoubleOrNull()?.let { it <= 0.0 } ?: true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            focusManager.clearFocus()
+            keyboardController?.hide()
+        }),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 /** Tap-to-reveal unit picker, matching the "value box + unit box" pattern of the mock. */
@@ -742,11 +831,15 @@ private fun DashboardStatsRow(thisMonth: String, lastWorkout: String) {
 private fun LiveRunStatsRow(state: LiveRunState.Snapshot, settings: TrainingSettings) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         StatItem("BPM", state.currentBpm?.toString() ?: "--")
-        if (state.activityType == ActivityType.RUN) {
-            StatItem("Pace", state.currentPaceSecPerKm?.let { formatPace(it, settings.paceUnit) } ?: "--")
+        if (state.activityType.usesGps) {
+            if (state.activityType.showsSpeed) {
+                StatItem("Speed", state.currentPaceSecPerKm?.let { formatSpeed(it, settings.paceUnit) } ?: "--")
+            } else {
+                StatItem("Pace", state.currentPaceSecPerKm?.let { formatPace(it, settings.paceUnit) } ?: "--")
+            }
             StatItem("Distance", formatDistance(state.distanceMeters, settings.distanceUnit))
         } else {
-            StatItem("Activity", "Bike")
+            StatItem("Activity", state.activityType.displayName())
         }
     }
 }

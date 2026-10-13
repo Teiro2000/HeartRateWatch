@@ -20,6 +20,8 @@ import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.DistanceUnit
 import com.pedro.heartratewatch.shared.formatDistance
 import com.pedro.heartratewatch.shared.formatPace
+import com.pedro.heartratewatch.shared.formatSpeed
+import com.pedro.heartratewatch.shared.speedUnitLabel
 import com.pedro.heartratewatch.wear.ActivityModeStore
 import com.pedro.heartratewatch.wear.CalibrationStore
 import com.pedro.heartratewatch.wear.DashboardStats
@@ -71,9 +73,6 @@ class HeartRateTileService : TileService() {
         requestParams: RequestBuilders.TileRequest
     ): ListenableFuture<TileBuilders.Tile> = scope.future {
         val state = HeartRateRepository.state.value
-        val settings = SettingsStore(applicationContext).settingsFlow.first()
-        val calibration = CalibrationStore(applicationContext).latestFlow.first()
-        val maxHrBpm = settings.manualMaxHrBpm ?: calibration?.bpm
         // While a session is active, state.activityType (set by ExerciseSessionService) is what's
         // actually running. Otherwise it's just left over from whatever last ran, so the readout
         // layout instead follows ActivityModeStore -- "what Start will begin next" -- which is
@@ -83,7 +82,12 @@ class HeartRateTileService : TileService() {
         } else {
             ActivityModeStore(applicationContext).current()
         }
-        val isRun = displayType == ActivityType.RUN
+        // Each activity has its own heart rate / pace thresholds.
+        val settings = SettingsStore(applicationContext).settingsFlow(displayType).first()
+        val calibration = CalibrationStore(applicationContext).latestFlow.first()
+        val maxHrBpm = settings.manualMaxHrBpm ?: calibration?.bpm
+        val isRun = displayType.usesGps
+        val showsSpeed = displayType.showsSpeed
 
         // Before a session's started there's nothing live to show yet -- a glance at streak/this
         // month/last workout (the same numbers the phone's own home screen shows) is more useful
@@ -110,9 +114,12 @@ class HeartRateTileService : TileService() {
                         .setWidth(expand())
                         .addContent(
                             readoutColumn(
-                                paceSec?.let { formatPace(it, settings.paceUnit).substringBefore(" /") } ?: "--",
+                                paceSec?.let {
+                                    if (showsSpeed) formatSpeed(it, settings.paceUnit).substringBefore(" ")
+                                    else formatPace(it, settings.paceUnit).substringBefore(" /")
+                                } ?: "--",
                                 statusColor(paceStatus),
-                                "pace /${settings.paceUnit.symbol}",
+                                if (showsSpeed) speedUnitLabel(settings.paceUnit) else "pace /${settings.paceUnit.symbol}",
                                 arrow = statusArrow(paceStatus)
                             )
                         )

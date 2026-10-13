@@ -68,7 +68,19 @@ class ExerciseSessionService : LifecycleService() {
     // only: no GPS, pace, splits, or distance alerts, since there's no real movement to measure.
     private var activityType = ActivityType.RUN
     private var exerciseStarted = false
-    private val isBike: Boolean get() = activityType == ActivityType.STATIONARY_BIKE
+    private val isStationaryBike: Boolean get() = activityType == ActivityType.STATIONARY_BIKE
+    private val hasGps: Boolean get() = activityType.usesGps
+    // Outdoor biking only: time spent stopped (lights, crossings) is kept out of the speed. Each
+    // distance sample is classed as moving or stopped by how far it moved since the previous one;
+    // the live speed is measured on a clock that only runs while moving, so a stop cannot drag it down.
+    private val trackStops: Boolean get() = activityType == ActivityType.BIKE
+    private var movingMillis = 0L
+    private var stoppedMillis = 0L
+    private var lastSampleMillis = 0L
+    private var lastSampleMeters = 0f
+    // Per-activity: a bike can legitimately go far faster than any runner.
+    private val minPlausiblePaceSecPerKm: Int
+        get() = if (trackStops) MIN_PLAUSIBLE_BIKE_PACE_SEC_PER_KM else MIN_PLAUSIBLE_PACE_SEC_PER_KM
 
     private var sessionStartMillis = 0L
     private var hrSum = 0L
@@ -191,7 +203,8 @@ class ExerciseSessionService : LifecycleService() {
         if (hrCount == 0) return
         val durationSeconds = ((System.currentTimeMillis() - sessionStartMillis) / 1000).toInt()
         // Bike distance is typed in on the phone afterwards; 0 means "not entered yet".
-        val finalDistanceMeters = if (isBike) 0f else HeartRateRepository.state.value.distanceMeters
+        val finalDistanceMeters = if (isStationaryBike) 0f else HeartRateRepository.state.value.distanceMeters
+        val stoppedSeconds = (stoppedMillis / 1000).toInt()
         val summary = RunSummary(
             startedAtMillis = sessionStartMillis,
             durationSeconds = durationSeconds,
@@ -206,13 +219,15 @@ class ExerciseSessionService : LifecycleService() {
             // (when there's little data to smooth against) could drag the whole average far off,
             // exactly like the 0:30/km case this replaced. Duration/distance can't be fooled that
             // way -- it's exact by definition, using the same two numbers already shown for the run.
-            avgPaceSecPerKm = if (!isBike && finalDistanceMeters > 0f) {
-                (durationSeconds * 1000.0 / finalDistanceMeters).roundToInt()
+            // A bike's average leaves out the time it spent stopped.
+            avgPaceSecPerKm = if (hasGps && finalDistanceMeters > 0f) {
+                ((durationSeconds - stoppedSeconds) * 1000.0 / finalDistanceMeters).roundToInt()
             } else null,
             best1kmSeconds = bestSplitSeconds(1_000f),
             best5kmSeconds = bestSplitSeconds(5_000f),
             best10kmSeconds = bestSplitSeconds(10_000f),
-            activityType = activityType
+            activityType = activityType,
+            stoppedSeconds = if (trackStops) stoppedSeconds else 0
         )
         val nodes = runCatching {
             Wearable.getNodeClient(this@ExerciseSessionService).connectedNodes.await()
@@ -231,9 +246,12 @@ class ExerciseSessionService : LifecycleService() {
             }
             // GPS only for a run -- a stationary bike (and calibration, which runs as one) has no
             // distance to measure.
-            if (!isBike) {
-                locationTracker = LocationDistanceTracker(this) { meters -> onSample(null, meters) }
-                    .also { it.start() }
+            if (hasGps) {
+                locationTracker = LocationDistanceTracker(
+                    this,
+                    maxSpeedMetersPerSecond = if (trackStops) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
+                    else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND
+                ) { meters -> onSample(null, meters) }.also { it.start() }
             }
         } catch (e: SecurityException) {
             // A missing runtime permission would otherwise look like "I tapped Start and nothing
@@ -330,8 +348,26 @@ class ExerciseSessionService : LifecycleService() {
      */
     private fun onSample(bpm: Int?, newDistanceMeters: Float?) {
         val distanceMeters = newDistanceMeters ?: HeartRateRepository.state.value.distanceMeters
-        val latestPace = if (isBike || newDistanceMeters == null) null else updateRollingPace(distanceMeters)
-        if (newDistanceMeters != null && !suppressAlerts && !isBike) {
+        val latestPace = if (!hasGps || newDistanceMeters == null) null else {
+            if (trackStops) {
+                // Classify this sample as moving or stopped, and only measure speed while moving.
+                val now = System.currentTimeMillis()
+                var moving = true
+                if (lastSampleMillis > 0L) {
+                    val dtMillis = now - lastSampleMillis
+                    val metersPerSecond =
+                        if (dtMillis > 0) (distanceMeters - lastSampleMeters) / (dtMillis / 1000f) else 0f
+                    moving = metersPerSecond >= MIN_MOVING_METERS_PER_SECOND
+                    if (moving) movingMillis += dtMillis else stoppedMillis += dtMillis
+                }
+                lastSampleMillis = now
+                lastSampleMeters = distanceMeters
+                if (moving) updateRollingPace(distanceMeters, movingMillis) else null
+            } else {
+                updateRollingPace(distanceMeters, System.currentTimeMillis())
+            }
+        }
+        if (newDistanceMeters != null && !suppressAlerts && hasGps) {
             val now = System.currentTimeMillis()
             // Same bad-sample problem bestSplitSeconds is exposed to as updateRollingPace was
             // (see its comment) -- a single implausible jump recorded here would hand the
@@ -346,7 +382,7 @@ class ExerciseSessionService : LifecycleService() {
                 val deltaMillis = now - prevMillis
                 if (deltaMeters > 0f && deltaMillis > 0L) (deltaMillis / 1000.0) / (deltaMeters / 1000.0) else null
             }
-            if (impliedSecPerKm == null || impliedSecPerKm >= MIN_PLAUSIBLE_PACE_SEC_PER_KM) {
+            if (impliedSecPerKm == null || impliedSecPerKm >= minPlausiblePaceSecPerKm) {
                 allDistanceSamples.add(now to distanceMeters)
             }
         }
@@ -373,7 +409,7 @@ class ExerciseSessionService : LifecycleService() {
         if (latestPace != null) {
             lifecycleScope.launch { handlePace(latestPace) }
         }
-        if (!isBike && newDistanceMeters != null) lifecycleScope.launch { checkDistanceProgress(distanceMeters) }
+        if (hasGps && newDistanceMeters != null) lifecycleScope.launch { checkDistanceProgress(distanceMeters) }
     }
 
     /**
@@ -382,8 +418,7 @@ class ExerciseSessionService : LifecycleService() {
      * null until there's enough distance/time in the window for a stable reading (e.g. right at
      * the start of a run, or whenever GPS is off and distance barely moves).
      */
-    private fun updateRollingPace(distanceMeters: Float): Int? {
-        val now = System.currentTimeMillis()
+    private fun updateRollingPace(distanceMeters: Float, now: Long): Int? {
         recentDistanceSamples.addLast(now to distanceMeters)
         while (recentDistanceSamples.isNotEmpty() &&
             now - recentDistanceSamples.first().first > PACE_WINDOW_MILLIS
@@ -405,7 +440,7 @@ class ExerciseSessionService : LifecycleService() {
         // even delivery timing) broke, not that the user is secretly a world-record sprinter --
         // discarding it (rather than averaging it in, or showing it live) is safer than trusting
         // it just because the math behind it is fine.
-        if (secPerKm < MIN_PLAUSIBLE_PACE_SEC_PER_KM) return null
+        if (secPerKm < minPlausiblePaceSecPerKm) return null
         return secPerKm.toInt()
     }
 
@@ -440,7 +475,7 @@ class ExerciseSessionService : LifecycleService() {
 
     private suspend fun handleHeartRate(bpm: Int) {
         if (suppressAlerts) return
-        val settings = settingsStore.settingsFlow.first()
+        val settings = settingsStore.settingsFlow(activityType).first()
         if (!settings.heartRateAlertsEnabled) return
 
         val maxHrBpm = settings.manualMaxHrBpm ?: calibrationStore.latestFlow.first()?.bpm
@@ -473,7 +508,7 @@ class ExerciseSessionService : LifecycleService() {
      */
     private suspend fun handlePace(paceSecPerKm: Int) {
         if (suppressAlerts) return
-        val settings = settingsStore.settingsFlow.first()
+        val settings = settingsStore.settingsFlow(activityType).first()
         if (!settings.paceAlertsEnabled) return
 
         val fastest = settings.fastestPaceSecPerKm
@@ -549,7 +584,7 @@ class ExerciseSessionService : LifecycleService() {
 
     private suspend fun checkDistanceProgress(distanceMeters: Float) {
         if (suppressAlerts) return
-        val target = settingsStore.settingsFlow.first().distanceTargetMeters ?: return
+        val target = settingsStore.settingsFlow(activityType).first().distanceTargetMeters ?: return
         if (!halfwayAlreadySent && distanceMeters >= target / 2f) {
             halfwayAlreadySent = true
             sendToPhone(DataLayerPaths.ALERT_HALFWAY)
@@ -614,6 +649,10 @@ class ExerciseSessionService : LifecycleService() {
         // sustained for a MIN_PACE_SAMPLE_MILLIS-long window. A reading faster than this means the
         // window's data is bad (see updateRollingPace's comment), not that it's real.
         private const val MIN_PLAUSIBLE_PACE_SEC_PER_KM = 100
+        // 30 sec/km is 120 km/h -- no bike gets there, but a fast descent can pass 36 km/h.
+        private const val MIN_PLAUSIBLE_BIKE_PACE_SEC_PER_KM = 30
+        // Below this (about 1.6 mph) a bike counts as stopped; GPS drift at a red light is smaller.
+        private const val MIN_MOVING_METERS_PER_SECOND = 0.7f
         // Health Services calls onExerciseUpdateReceived roughly once a second; whatever the
         // system's actual tile-refresh rate limit is (undocumented -- no published number from
         // Google, confirmed only by this app freezing on-device at higher frequencies and

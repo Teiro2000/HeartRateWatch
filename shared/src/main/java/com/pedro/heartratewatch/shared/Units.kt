@@ -31,6 +31,26 @@ fun formatPace(secPerKm: Int, unit: DistanceUnit): String {
     return "%d:%02d /%s".format(secPerUnit / 60, secPerUnit % 60, unit.symbol)
 }
 
+/** "km/h" or "mph" for the distance unit a person picked (miles -> mph, anything else -> km/h). */
+fun speedUnitLabel(unit: DistanceUnit): String = if (unit == DistanceUnit.MILES) "mph" else "km/h"
+
+/** Speed in km/h for a pace stored as seconds per kilometer. */
+fun speedKmhFromPace(secPerKm: Int): Double = 3600.0 / secPerKm
+
+/** Pace (seconds per km) for a speed in km/h. */
+fun paceFromSpeedKmh(kmh: Double): Int = (3600.0 / kmh).roundToInt()
+
+/** A speed in km/h converted to the unit's own (km/h or mph). */
+fun speedInUnit(kmh: Double, unit: DistanceUnit): Double = if (unit == DistanceUnit.MILES) kmh * 1000.0 / 1609.344 else kmh
+
+/** The inverse of [speedInUnit]: a speed typed in the unit's own km/h or mph, as km/h. */
+fun speedKmhFromUnit(value: Double, unit: DistanceUnit): Double =
+    if (unit == DistanceUnit.MILES) value * 1609.344 / 1000.0 else value
+
+/** Formats a pace stored as seconds per kilometer as a speed, e.g. "23.4 km/h" or "14.5 mph". */
+fun formatSpeed(secPerKm: Int, unit: DistanceUnit): String =
+    "%.1f %s".format(speedInUnit(speedKmhFromPace(secPerKm), unit), speedUnitLabel(unit))
+
 /**
  * Formats a distance stored canonically in meters into "<value> <unit>", e.g. "5.23 km". Whole
  * numbers for the larger fixed units (meters/feet/yards), where a decimal just adds noise.

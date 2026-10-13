@@ -67,9 +67,25 @@ enum class AlertType { HIGH_HR, LOW_HR, PACE_TOO_SLOW, PACE_TOO_FAST, TARGET_REA
 
 /**
  * What kind of workout a session is. A stationary bike session tracks heart rate only -- no GPS,
- * pace, splits, or distance alerts -- and its distance is typed in on the phone afterwards.
+ * pace, splits, or distance alerts -- and its distance is typed in on the phone afterwards. WALK
+ * tracks like a run (and its history entries can carry a rucking pack weight); BIKE is outdoor
+ * biking, which tracks GPS distance but reports speed (km/h or mph) and leaves time spent
+ * stopped (red lights and the like) out of it.
+ *
+ * New entries only ever go at the end: RunSummary sends the ordinal over the wire.
  */
-enum class ActivityType { RUN, STATIONARY_BIKE }
+enum class ActivityType {
+    RUN, STATIONARY_BIKE, WALK, BIKE;
+
+    /** Measures GPS distance (everything except the stationary bike). */
+    val usesGps: Boolean get() = this != STATIONARY_BIKE
+
+    /** Shown as speed (km/h, mph) rather than pace (min per km/mi). */
+    val showsSpeed: Boolean get() = this == BIKE
+
+    /** Either kind of bike. */
+    val isBike: Boolean get() = this == BIKE || this == STATIONARY_BIKE
+}
 
 /** Threshold input mode chosen by the user in Settings. */
 enum class ThresholdMode { BPM, PERCENT_MAX_HR }
@@ -125,4 +141,27 @@ data class TrainingSettings(
         ThresholdMode.BPM -> upperThresholdBpm
         ThresholdMode.PERCENT_MAX_HR -> maxHrBpm?.let { it * upperThresholdPercent / 100 } ?: upperThresholdBpm
     }
+}
+
+/**
+ * Starting heart rate / pace / target settings for each kind of activity -- the fields that are
+ * kept separately per activity. Walking and cycling are naturally far from running's defaults, so
+ * each begins with its own sensible range; everything (units, warmup, break length, sounds) that
+ * isn't per-activity is shared. Pace is stored as seconds per km everywhere, including for the bike,
+ * whose speed limits are shown to the user as km/h or mph.
+ */
+fun defaultSettingsFor(type: ActivityType): TrainingSettings = when (type) {
+    ActivityType.RUN, ActivityType.STATIONARY_BIKE -> TrainingSettings()
+    ActivityType.WALK -> TrainingSettings(
+        lowerThresholdBpm = 90,
+        upperThresholdBpm = 130,
+        lowerThresholdPercent = 50,
+        upperThresholdPercent = 70,
+        fastestPaceSecPerKm = 420,
+        slowestPaceSecPerKm = 780
+    )
+    ActivityType.BIKE -> TrainingSettings(
+        fastestPaceSecPerKm = 100,   // 36 km/h
+        slowestPaceSecPerKm = 240    // 15 km/h
+    )
 }
