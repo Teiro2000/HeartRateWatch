@@ -576,14 +576,14 @@ private fun PhoneTrackingControls(liveRun: LiveRunState.Snapshot) {
     } else if (!liveRun.isActive) {
         // Same filled green button as "Start workout" on the Workout menu.
         Button(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Start cardio")
+            Text("Start Cardio")
         }
     }
 
     if (picking) {
         AlertDialog(
             onDismissRequest = { picking = false },
-            title = { Text("Start cardio") },
+            title = { Text("Start Cardio") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
