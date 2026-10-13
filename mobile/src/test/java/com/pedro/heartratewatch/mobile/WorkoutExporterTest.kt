@@ -62,7 +62,7 @@ class WorkoutExporterTest {
     @Test
     fun numbersContinueAfterImportedOnesInDateOrder() {
         val bytes = ByteArrayOutputStream().also { WorkoutExporter.write(sampleWorkouts(), it) }.toByteArray()
-        val rows = WorkoutImporter.readSheet(ByteArrayInputStream(bytes))
+        val rows = WorkoutImporter.readTable(ByteArrayInputStream(bytes))
         assertEquals(WorkoutExporter.HEADERS, rows[0])
         // the imported workout keeps its own number (4); the native one is numbered after it
         assertEquals(listOf("4", "5"), rows.drop(1).map { it[0] }.distinct())
