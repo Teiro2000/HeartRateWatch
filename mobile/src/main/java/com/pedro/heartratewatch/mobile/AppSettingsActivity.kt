@@ -28,6 +28,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.pedro.heartratewatch.shared.AlertType
+import com.pedro.heartratewatch.shared.DistanceUnit
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -145,6 +149,40 @@ private fun AppSettingsScreen(
                         Button(onClick = {}) { Text(option.symbol) }
                     } else {
                         OutlinedButton(onClick = { scope.launch { workoutRepository.setWeightUnit(option) } }) { Text(option.symbol) }
+                    }
+                }
+            }
+            // Cardio: the unit distances are shown in on the phone, ahead of the distance target's own unit.
+            val displayRepo = remember { DisplayDistanceUnitRepository(context.applicationContext) }
+            val displayOverride by displayRepo.overrideFlow.collectAsStateWithLifecycle(initialValue = null)
+            var unitMenuOpen by remember { mutableStateOf(false) }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Distance unit (cardio)")
+                    Text(
+                        "How distances are shown in History and Stats. Overrides the unit chosen for the distance target.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Box {
+                    OutlinedButton(onClick = { unitMenuOpen = true }) {
+                        Text((displayOverride?.symbol ?: "Same as target") + "  " + (if (unitMenuOpen) "▲" else "▼"))
+                    }
+                    DropdownMenu(expanded = unitMenuOpen, onDismissRequest = { unitMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Same as target") },
+                            onClick = { scope.launch { displayRepo.set(null) }; unitMenuOpen = false }
+                        )
+                        DistanceUnit.entries.forEach { unit ->
+                            DropdownMenuItem(
+                                text = { Text(unit.symbol) },
+                                onClick = { scope.launch { displayRepo.set(unit) }; unitMenuOpen = false }
+                            )
+                        }
                     }
                 }
             }

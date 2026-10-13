@@ -160,6 +160,9 @@ private fun SettingsScreen(
     val saved by repository.settingsFlow.collectAsStateWithLifecycle(initialValue = TrainingSettings())
     val runs by runHistoryRepository.historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val liveRun by LiveRunState.state.collectAsStateWithLifecycle()
+    // The unit picked in the main Settings for showing distances beats the target's unit.
+    val displayOverride by remember { DisplayDistanceUnitRepository(context.applicationContext).overrideFlow }
+        .collectAsStateWithLifecycle(initialValue = null)
     val selectedCardio by remember { SelectedCardioRepository(context.applicationContext).selectedFlow }
         .collectAsStateWithLifecycle(initialValue = ActivityType.RUN)
 
@@ -182,10 +185,10 @@ private fun SettingsScreen(
             HorizontalDivider()
 
             if (liveRun.isActive) {
-                LiveRunStatsRow(liveRun, saved)
+                LiveRunStatsRow(liveRun, displayOverride?.let { saved.copy(distanceUnit = it) } ?: saved)
             } else {
                 DashboardStatsRow(
-                    thisMonth = formatDistance(thisMonthDistanceMeters(runs).toFloat(), saved.distanceUnit),
+                    thisMonth = formatDistance(thisMonthDistanceMeters(runs).toFloat(), displayOverride ?: saved.distanceUnit),
                     lastWorkout = runs.maxByOrNull { it.startedAtMillis }
                         ?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it.startedAtMillis)) }
                         ?: "--"

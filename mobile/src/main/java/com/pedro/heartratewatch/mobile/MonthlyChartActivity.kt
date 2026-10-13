@@ -86,7 +86,11 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
     val scope = rememberCoroutineScope()
     val runs by repository.historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     // Reuses the pace unit (km or miles) as the display unit for totals.
-    val unit by unitPreferences.paceUnitFlow.collectAsStateWithLifecycle(initialValue = DistanceUnit.KILOMETERS)
+    val paceUnit by unitPreferences.paceUnitFlow.collectAsStateWithLifecycle(initialValue = DistanceUnit.KILOMETERS)
+    // The unit picked in the main Settings for showing distances beats this default.
+    val displayOverride by remember { DisplayDistanceUnitRepository(context.applicationContext).overrideFlow }
+        .collectAsStateWithLifecycle(initialValue = null)
+    val unit = displayOverride ?: paceUnit
     val totals = remember(runs) { monthlyTotals(runs) }
     val snackbarHostState = remember { SnackbarHostState() }
 

@@ -158,7 +158,7 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
     val solidBackground = colorScheme.background
     MaterialTheme(colorScheme = colorScheme.copy(background = Color.Transparent), typography = typography) {
         Surface(color = solidBackground) {
-            CompositionLocalProvider(LocalWallpaperGridStep provides (if (useLightTheme) null else WALLPAPER_GRID_STEP)) {
+            CompositionLocalProvider(LocalWallpaperGridStep provides WALLPAPER_GRID_STEP) {
                 Box(modifier = Modifier.fillMaxSize().drawBehind { drawWallpaper(useLightTheme) }) {
                     content()
                 }
@@ -172,9 +172,8 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
  * readable as on a plain background. Sage (light) stays plain.
  */
 private fun DrawScope.drawWallpaper(light: Boolean) {
-    if (light) return
     val step = WALLPAPER_GRID_STEP.toPx()
-    val color = PipBoyGreen.copy(alpha = 0.10f)
+    val color = if (light) SageGreen.copy(alpha = 0.13f) else PipBoyGreen.copy(alpha = 0.10f)
     val stroke = 1.dp.toPx()
     var x = 0f
     while (x <= size.width) {
