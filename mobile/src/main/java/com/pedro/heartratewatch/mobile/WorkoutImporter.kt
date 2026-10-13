@@ -5,7 +5,7 @@ import java.util.Calendar
 import java.util.zip.ZipInputStream
 
 /**
- * Reads a workout log from an Excel (.xlsx) sheet with one row per set. Columns are found by their
+ * Reads a workout log from an Excel (.xlsx) sheet or a .csv file with one row per set. Columns are found by their
  * header names, so they can be in any order (and extra columns are ignored):
  *
  *   Workout | Date | Exercise | Set | Weight (lb) | Reps | Exercise note | Intensity | Workout note
@@ -27,9 +27,49 @@ object WorkoutImporter {
         val setCount: Int get() = workouts.sumOf { w -> w.exercises.sumOf { it.sets.size } }
     }
 
-    /** Parses the sheet into a [Plan]; [existing] are the exercises already in the database. */
-    fun plan(xlsx: InputStream, existing: List<Exercise>, nowMillis: Long = System.currentTimeMillis()): Plan =
-        build(readSheet(xlsx), existing, nowMillis)
+    /** Parses the file (.xlsx or .csv, told apart by its contents) into a [Plan]; [existing] are the exercises already in the database. */
+    fun plan(file: InputStream, existing: List<Exercise>, nowMillis: Long = System.currentTimeMillis()): Plan =
+        build(readTable(file), existing, nowMillis)
+
+    /** The rows of an Excel file (a zip, which starts with "PK") or of a CSV file. */
+    internal fun readTable(input: InputStream): List<List<String>> {
+        val bytes = input.readBytes()
+        val isZip = bytes.size >= 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
+        return if (isZip) readSheet(java.io.ByteArrayInputStream(bytes)) else parseCsv(bytes.toString(Charsets.UTF_8))
+    }
+
+    /**
+     * CSV with quoted fields (commas, doubled quotes and line breaks inside quotes), a leading
+     * byte-order mark, and either commas or semicolons between fields (European Excel saves
+     * semicolon-separated files) -- whichever the header row uses more.
+     */
+    internal fun parseCsv(text: String): List<List<String>> {
+        val body = text.removePrefix("\uFEFF")
+        val firstLine = body.lineSequence().firstOrNull().orEmpty()
+        val delimiter = if (firstLine.count { it == ';' } > firstLine.count { it == ',' }) ';' else ','
+
+        val rows = mutableListOf<List<String>>()
+        var row = mutableListOf<String>()
+        val cell = StringBuilder()
+        var quoted = false
+        var i = 0
+        fun endCell() { row += cell.toString(); cell.setLength(0) }
+        fun endRow() { endCell(); rows += row; row = mutableListOf() }
+        while (i < body.length) {
+            val c = body[i]
+            when {
+                quoted && c == '"' && i + 1 < body.length && body[i + 1] == '"' -> { cell.append('"'); i++ }
+                c == '"' -> quoted = !quoted
+                !quoted && c == delimiter -> endCell()
+                !quoted && c == '\n' -> endRow()
+                !quoted && c == '\r' -> {}
+                else -> cell.append(c)
+            }
+            i++
+        }
+        if (cell.isNotEmpty() || row.isNotEmpty()) endRow()
+        return rows
+    }
 
     // ---------------------------------------------------------------- building the plan
 

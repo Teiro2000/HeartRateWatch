@@ -173,13 +173,13 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                 }
                 result
                     .onSuccess { importPlan = it }
-                    .onFailure { importMessage = "Couldn't read that file: ${it.message ?: "it isn't an Excel (.xlsx) file"}" }
+                    .onFailure { importMessage = "Couldn't read that file: ${it.message ?: "it isn't an Excel (.xlsx) or .csv file"}" }
             }
         }
     }
-    // Export: writes every finished workout to an Excel file the user picks a place for.
+    // Export: writes every finished workout to a .csv file the user picks a place for.
     val exportPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        ActivityResultContracts.CreateDocument("text/csv")
     ) { uri ->
         if (uri != null) {
             scope.launch {
@@ -198,13 +198,13 @@ private fun WorkoutApp(repository: WorkoutRepository) {
     if (showImportHelp) {
         AlertDialog(
             onDismissRequest = { showImportHelp = false },
-            title = { Text("Import from Excel") },
+            title = { Text("Import workouts") },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Use an .xlsx file with one row per set and a header row on top:")
+                    Text("Use a .csv or Excel (.xlsx) file with one row per set and a header row on top:")
                     Text(
                         "Workout | Date | Exercise | Set | Weight (lb) | Reps | Exercise note | Intensity | Workout note",
                         style = MaterialTheme.typography.bodySmall
@@ -217,7 +217,7 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     Text("• Weight: use the header \"Weight (kg)\" if the numbers are kg, otherwise they're lb. Use a negative weight for assisted exercises.", style = MaterialTheme.typography.bodySmall)
                     Text("• Intensity: Easy, OK or Hard.", style = MaterialTheme.typography.bodySmall)
                     Text("• Exercise note / Workout note: free text, on any row of that exercise or workout.", style = MaterialTheme.typography.bodySmall)
-                    Text("Tip: Export to Excel writes a file in this same format (plus a Workout ID column), so you can edit it and import it back. Re-importing the same workouts replaces them instead of duplicating.", style = MaterialTheme.typography.bodySmall)
+                    Text("Tip: Export writes a .csv file in this same format (plus a Workout ID column), so you can edit it and import it back. Re-importing the same workouts replaces them instead of duplicating.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
@@ -377,7 +377,7 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                     onImport = { showImportHelp = true },
                     onExport = {
                         if (history.isEmpty()) importMessage = "There are no finished workouts to export yet."
-                        else exportPicker.launch("PulseGuard workouts.xlsx")
+                        else exportPicker.launch("PulseGuard workouts.csv")
                     },
                     onDeleteAll = { scope.launch { repository.deleteAllWorkouts() } }
                 )
