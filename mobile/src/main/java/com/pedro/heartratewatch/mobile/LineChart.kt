@@ -26,7 +26,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import com.pedro.heartratewatch.mobile.theme.LocalWallpaperGridStep
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -74,6 +77,8 @@ internal fun DateRangeChips(range: Pair<LocalDate, LocalDate>?, onChange: (Pair<
 }
 
 private const val LEFT_PAD_DP = 44f
+// The least room the y-axis labels need to the left of the axis when it is snapped to a wallpaper grid line.
+private const val MIN_SNAPPED_LEFT_PAD_DP = 38f
 private const val RIGHT_PAD_DP = 12f
 private const val TOP_PAD_DP = 12f
 private const val BOTTOM_PAD_DP = 24f
@@ -98,6 +103,18 @@ internal fun LineChart(
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val highlight = MaterialTheme.colorScheme.onSurface
     val density = LocalDensity.current.density
+    val pageColor = MaterialTheme.colorScheme.surface
+
+    // With the dark theme's wallpaper grid showing, the y-axis is moved to the nearest grid line to
+    // the right (the grid is fixed to the screen, so this needs where the chart sits on it).
+    val gridStep = LocalWallpaperGridStep.current
+    var chartLeftPx by remember { mutableStateOf(0f) }
+    val leftPadPx = if (gridStep == null) {
+        LEFT_PAD_DP * density
+    } else {
+        val stepPx = gridStep.value * density
+        kotlin.math.ceil((chartLeftPx + MIN_SNAPPED_LEFT_PAD_DP * density) / stepPx) * stepPx - chartLeftPx
+    }
 
     val all = series.flatMap { it.values }
     var yMin = all.min()
@@ -108,7 +125,7 @@ internal fun LineChart(
     yMax += yPad
 
     fun xs(): List<Float> {
-        val left = LEFT_PAD_DP * density
+        val left = leftPadPx
         val width = size.width - left - RIGHT_PAD_DP * density
         val tMin = xMillis.first()
         val span = xMillis.last() - tMin
@@ -126,7 +143,8 @@ internal fun LineChart(
             .fillMaxWidth()
             .height(240.dp)
             .onSizeChanged { size = it }
-            .pointerInput(xMillis, series.size, size) {
+            .onGloballyPositioned { chartLeftPx = it.positionInRoot().x }
+            .pointerInput(xMillis, series.size, size, leftPadPx) {
                 detectTapGestures { tap ->
                     val positions = xs()
                     val nearest = positions.indices.minByOrNull { abs(positions[it] - tap.x) }
@@ -135,8 +153,10 @@ internal fun LineChart(
             }
     ) {
         if (size == IntSize.Zero) return@Canvas
+        // Solid behind the plot, so the wallpaper grid doesn't run through the chart.
+        drawRect(pageColor)
         val positions = xs()
-        val left = LEFT_PAD_DP * density
+        val left = leftPadPx
         val bottom = size.height - BOTTOM_PAD_DP * density
 
         drawLine(axisColor.copy(alpha = 0.5f), Offset(left, TOP_PAD_DP * density), Offset(left, bottom), 1f)
