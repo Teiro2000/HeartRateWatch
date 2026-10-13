@@ -611,9 +611,8 @@ private fun ActivityPickerRow(selected: ActivityType, onSelect: (ActivityType) -
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Settings below are saved separately for each activity:", style = MaterialTheme.typography.bodySmall)
         Box {
-            // Dark green like the other main buttons, with the same arrow the sections use: down
-            // while closed, up while the list is open.
-            Button(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+            // Outlined, with the same arrow the sections use: down while closed, up while the list is open.
+            OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
