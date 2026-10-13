@@ -54,7 +54,7 @@ class TileActionActivity : ComponentActivity() {
                 // Brings Strava back to the foreground so you can hit its own Finish/stop -- same
                 // toggle as starting, since the point of turning it on is having Strava tracking
                 // alongside PulseGuard for the whole run, not just at the start of it.
-                val settings = SettingsStore(applicationContext).settingsFlow(ActivityType.RUN).first()
+                val settings = SettingsStore(applicationContext).settingsFlow(HeartRateRepository.state.value.activityType).first()
                 launchStravaIfEnabled(this@TileActionActivity, settings)
                 finish()
             }
