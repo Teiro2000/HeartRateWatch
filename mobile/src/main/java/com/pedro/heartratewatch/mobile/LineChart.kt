@@ -4,7 +4,6 @@ import android.app.DatePickerDialog
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
