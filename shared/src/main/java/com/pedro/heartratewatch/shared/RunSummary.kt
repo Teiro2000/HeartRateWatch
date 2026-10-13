@@ -29,7 +29,11 @@ data class RunSummary(
     val packWeightLb: Float = 0f,
     // Time spent stopped (red lights and the like) on an outdoor bike ride; left out of the average
     // speed. 0 for every other activity.
-    val stoppedSeconds: Int = 0
+    val stoppedSeconds: Int = 0,
+    // Whether this session met the distance target at the time. Set on the phone when it is saved
+    // (never sent from the watch) and then kept for good: changing the target later doesn't take
+    // a star away or hand one to older sessions.
+    val reachedTarget: Boolean = false
 ) {
     fun toBytes(): ByteArray = ByteBuffer.allocate(BYTE_SIZE)
         .putLong(startedAtMillis)

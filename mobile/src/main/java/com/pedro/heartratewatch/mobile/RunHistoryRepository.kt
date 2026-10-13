@@ -1,6 +1,7 @@
 package com.pedro.heartratewatch.mobile
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -18,7 +19,7 @@ private val Context.runHistoryDataStore by preferencesDataStore(name = "run_hist
 /** Header row for exported CSV files -- also documents the column order used internally. */
 private const val CSV_HEADER = "started_at_millis,duration_seconds,avg_bpm,max_bpm,min_bpm," +
     "distance_meters,avg_pace_sec_per_km,best_1km_seconds,best_5km_seconds,best_10km_seconds," +
-    "activity_type,pack_weight_lb,stopped_seconds"
+    "activity_type,pack_weight_lb,stopped_seconds,reached_target"
 
 /**
  * Local history of completed runs, populated from the "/run/summary" message
@@ -32,6 +33,7 @@ class RunHistoryRepository(private val context: Context) {
 
     private object Keys {
         val HISTORY = stringPreferencesKey("history")
+        val STARS_AWARDED = booleanPreferencesKey("stars_awarded")
     }
 
     /** Most recent run first. */
@@ -39,9 +41,20 @@ class RunHistoryRepository(private val context: Context) {
         parse(prefs[Keys.HISTORY]).sortedByDescending { it.startedAtMillis }
     }
 
+    /** The distance target set for each kind of activity right now. */
+    private suspend fun currentTargets(): Map<ActivityType, Float?> {
+        val settings = SettingsRepository(context)
+        return ActivityType.entries.associateWith { settings.settingsFlow(it).first().distanceTargetMeters }
+    }
+
+    /** True if [run] already has its star, or covers at least the current target for its activity. */
+    private fun starred(run: RunSummary, targets: Map<ActivityType, Float?>): Boolean =
+        run.reachedTarget || targets[run.activityType]?.let { run.distanceMeters >= it } == true
+
     suspend fun addRun(summary: RunSummary) {
+        val targets = currentTargets()
         context.runHistoryDataStore.edit { prefs ->
-            val updated = parse(prefs[Keys.HISTORY]) + summary
+            val updated = parse(prefs[Keys.HISTORY]) + summary.copy(reachedTarget = starred(summary, targets))
             prefs[Keys.HISTORY] = serialize(updated)
         }
         pushDashboardStatsToWatch()
@@ -63,9 +76,13 @@ class RunHistoryRepository(private val context: Context) {
 
     /** Sets a workout's distance -- used to fill in a stationary bike ride after the fact. */
     suspend fun updateDistance(startedAtMillis: Long, distanceMeters: Float) {
+        val targets = currentTargets()
         context.runHistoryDataStore.edit { prefs ->
             val updated = parse(prefs[Keys.HISTORY]).map {
-                if (it.startedAtMillis == startedAtMillis) it.copy(distanceMeters = distanceMeters) else it
+                if (it.startedAtMillis == startedAtMillis) {
+                    val changed = it.copy(distanceMeters = distanceMeters)
+                    changed.copy(reachedTarget = starred(changed, targets))
+                } else it
             }
             prefs[Keys.HISTORY] = serialize(updated)
         }
@@ -89,15 +106,33 @@ class RunHistoryRepository(private val context: Context) {
      */
     suspend fun importRuns(runs: List<RunSummary>): Int {
         var added = 0
+        val targets = currentTargets()
         context.runHistoryDataStore.edit { prefs ->
             val existing = parse(prefs[Keys.HISTORY])
             val existingStarts = existing.mapTo(HashSet()) { it.startedAtMillis }
             val toAdd = runs.filterNot { it.startedAtMillis in existingStarts }
+                .map { it.copy(reachedTarget = starred(it, targets)) }
             added = toAdd.size
             prefs[Keys.HISTORY] = serialize(existing + toAdd)
         }
         pushDashboardStatsToWatch()
         return added
+    }
+
+    /**
+     * One time only: gives the star to every run that meets the target as it stands now, which is
+     * exactly the set that was showing a star before stars were saved with each run. From then on a
+     * star is only ever earned when a session is saved (or a bike distance is entered) and never
+     * changes with the target.
+     */
+    suspend fun awardStarsOnce() {
+        if (context.runHistoryDataStore.data.first()[Keys.STARS_AWARDED] == true) return
+        val targets = currentTargets()
+        context.runHistoryDataStore.edit { prefs ->
+            val updated = parse(prefs[Keys.HISTORY]).map { it.copy(reachedTarget = starred(it, targets)) }
+            prefs[Keys.HISTORY] = serialize(updated)
+            prefs[Keys.STARS_AWARDED] = true
+        }
     }
 
     /**
@@ -135,7 +170,7 @@ class RunHistoryRepository(private val context: Context) {
             if (line.isBlank()) return@mapNotNull null
             val parts = line.split(",")
             // Files and saved history from before walking/biking have 11 columns; newer ones have 13.
-            if (parts.size != 11 && parts.size != 13) return@mapNotNull null
+            if (parts.size != 11 && parts.size != 13 && parts.size != 14) return@mapNotNull null
             runCatching {
                 RunSummary(
                     startedAtMillis = parts[0].toLong(),
@@ -151,7 +186,8 @@ class RunHistoryRepository(private val context: Context) {
                     activityType = runCatching { ActivityType.valueOf(parts[10]) }
                         .getOrDefault(ActivityType.RUN),
                     packWeightLb = parts.getOrNull(11)?.toFloatOrNull() ?: 0f,
-                    stoppedSeconds = parts.getOrNull(12)?.toIntOrNull() ?: 0
+                    stoppedSeconds = parts.getOrNull(12)?.toIntOrNull() ?: 0,
+                    reachedTarget = parts.getOrNull(13) == "true"
                 )
             }.getOrNull()
         }.toList()
@@ -161,6 +197,6 @@ class RunHistoryRepository(private val context: Context) {
         "${it.startedAtMillis},${it.durationSeconds},${it.avgBpm},${it.maxBpm},${it.minBpm}," +
             "${it.distanceMeters},${it.avgPaceSecPerKm ?: -1}," +
             "${it.best1kmSeconds ?: -1},${it.best5kmSeconds ?: -1},${it.best10kmSeconds ?: -1}," +
-            "${it.activityType.name},${it.packWeightLb},${it.stoppedSeconds}"
+            "${it.activityType.name},${it.packWeightLb},${it.stoppedSeconds},${it.reachedTarget}"
     }
 }
