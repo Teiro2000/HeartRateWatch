@@ -467,7 +467,7 @@ private fun MenuScreen(
                 }
             }
         }
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start workout") }
+        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start Workout") }
         MenuListRow("Templates", Icons.Outlined.ViewAgenda, onTemplates)
         MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
         MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
@@ -502,7 +502,7 @@ private fun ChooseTemplateScreen(
     onPick: (WorkoutTemplate?) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ScreenTitle("Start workout")
+        ScreenTitle("Start Workout")
         Text("Pick a template, or start empty and add exercises as you go.", style = MaterialTheme.typography.bodySmall)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (recent.isNotEmpty()) {
