@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -47,11 +48,19 @@ class AppSettingsActivity : ComponentActivity() {
     private val themePreferenceRepository by lazy { ThemePreferenceRepository(applicationContext) }
     private val reminderRepository by lazy { StreakReminderRepository(applicationContext) }
     private val alertPlayer by lazy { AlertPlayer(applicationContext) }
+    private val workoutRepository by lazy { WorkoutRepository(applicationContext) }
+    private val cardioSettingsRepository by lazy { SettingsRepository(applicationContext) }
+    private val calibrationRepository by lazy { CalibrationRepository(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            PipBoyTheme { AppSettingsScreen(themePreferenceRepository, reminderRepository, alertPlayer) }
+            PipBoyTheme {
+                AppSettingsScreen(
+                    themePreferenceRepository, reminderRepository, alertPlayer,
+                    workoutRepository, cardioSettingsRepository, calibrationRepository
+                )
+            }
         }
     }
 }
@@ -60,7 +69,10 @@ class AppSettingsActivity : ComponentActivity() {
 private fun AppSettingsScreen(
     themePreferenceRepository: ThemePreferenceRepository,
     reminderRepository: StreakReminderRepository,
-    alertPlayer: AlertPlayer
+    alertPlayer: AlertPlayer,
+    workoutRepository: WorkoutRepository,
+    cardioSettingsRepository: SettingsRepository,
+    calibrationRepository: CalibrationRepository
 ) {
     val scope = rememberCoroutineScope()
     val useLightTheme by themePreferenceRepository.useLightThemeFlow.collectAsStateWithLifecycle(initialValue = false)
@@ -116,6 +128,33 @@ private fun AppSettingsScreen(
                         }
                     }
                 )
+            }
+            // Workout: the unit weights are shown and entered in.
+            val weightUnit by workoutRepository.weightUnitFlow.collectAsStateWithLifecycle(initialValue = WeightUnit.LB)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Weight unit")
+                    Text("For Workout weights.", style = MaterialTheme.typography.bodySmall)
+                }
+                WeightUnit.entries.forEach { option ->
+                    if (option == weightUnit) {
+                        Button(onClick = {}) { Text(option.symbol) }
+                    } else {
+                        OutlinedButton(onClick = { scope.launch { workoutRepository.setWeightUnit(option) } }) { Text(option.symbol) }
+                    }
+                }
+            }
+            var cardioOpen by remember { mutableStateOf(false) }
+            AccordionSection(
+                "Cardio settings",
+                expanded = cardioOpen,
+                onToggle = { cardioOpen = !cardioOpen }
+            ) {
+                CardioSettingsContent(cardioSettingsRepository, calibrationRepository)
             }
             var soundsOpen by remember { mutableStateOf(false) }
             val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }

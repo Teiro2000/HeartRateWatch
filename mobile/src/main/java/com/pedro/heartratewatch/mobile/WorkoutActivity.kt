@@ -275,8 +275,6 @@ private fun WorkoutApp(repository: WorkoutRepository) {
             when (val current = screen) {
                 Screen.Menu -> MenuScreen(
                     active = active,
-                    unit = unit,
-                    onUnitChange = { scope.launch { repository.setWeightUnit(it) } },
                     onResume = { screen = Screen.Active },
                     onDiscard = { active = null },
                     onStart = { screen = Screen.ChooseTemplate },
@@ -429,8 +427,6 @@ internal fun ScreenTitle(text: String) {
 @Composable
 private fun MenuScreen(
     active: WorkoutLog?,
-    unit: WeightUnit,
-    onUnitChange: (WeightUnit) -> Unit,
     onResume: () -> Unit,
     onDiscard: () -> Unit,
     onStart: () -> Unit,
@@ -470,17 +466,6 @@ private fun MenuScreen(
         MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
         MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
         MenuListRow("History", Icons.Outlined.History, onHistory)
-        HorizontalDivider()
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Weight unit", modifier = Modifier.weight(1f))
-            WeightUnit.entries.forEach { option ->
-                if (option == unit) {
-                    Button(onClick = {}) { Text(option.symbol) }
-                } else {
-                    OutlinedButton(onClick = { onUnitChange(option) }) { Text(option.symbol) }
-                }
-            }
-        }
         HorizontalDivider()
     }
     if (confirmDiscard) {

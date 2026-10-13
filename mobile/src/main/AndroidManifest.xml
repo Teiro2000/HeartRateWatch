@@ -30,6 +30,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".SelectExerciseActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".WorkoutActivity"
             android:exported="false" />
 
