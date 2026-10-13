@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.History
@@ -116,7 +117,6 @@ internal val SUPPORTED_AUDIO_MIME_TYPES = arrayOf(
 class MainActivity : ComponentActivity() {
 
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
-    private val calibrationRepository by lazy { CalibrationRepository(applicationContext) }
     private val runHistoryRepository by lazy { RunHistoryRepository(applicationContext) }
 
     // Live-only (registered while this Activity is actually open), not manifest-declared --
@@ -138,7 +138,6 @@ class MainActivity : ComponentActivity() {
             PipBoyTheme {
                 SettingsScreen(
                     settingsRepository,
-                    calibrationRepository,
                     runHistoryRepository
                 )
             }
@@ -154,46 +153,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SettingsScreen(
     repository: SettingsRepository,
-    calibrationRepository: CalibrationRepository,
     runHistoryRepository: RunHistoryRepository
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    // Heart rate / pace / target settings are kept per activity; this picks which one the sections below edit.
-    var selectedActivity by remember { mutableStateOf(ActivityType.RUN) }
-    val saved by remember(selectedActivity) { repository.settingsFlow(selectedActivity) }
-        .collectAsStateWithLifecycle(initialValue = defaultSettingsFor(selectedActivity))
-    val latestCalibration by calibrationRepository.latestFlow.collectAsStateWithLifecycle(initialValue = null)
+    // Units for the numbers shown on this menu (shared by every activity).
+    val saved by repository.settingsFlow.collectAsStateWithLifecycle(initialValue = TrainingSettings())
     val runs by runHistoryRepository.historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val liveRun by LiveRunState.state.collectAsStateWithLifecycle()
-    var draft by remember(saved) { mutableStateOf(saved) }
-    // Units live on draft/TrainingSettings like everything else on this screen now (they're
-    // synced to the watch too) -- edited here and only actually persisted on Save, same as every
-    // other field, rather than writing through immediately. They used to write through a
-    // separate, unsynced store, so that was safe; now that they share storage with the rest of
-    // this draft, an instant write would refresh `saved` and reset any other unsaved edit on this
-    // screen out from under the user.
-    val paceUnit = draft.paceUnit
-    val targetDistanceUnit = draft.distanceUnit
-
-    // Auto-saves (and syncs to the watch) shortly after the user stops editing, rather than
-    // requiring an explicit Save tap. Debounced, not immediate: LaunchedEffect cancels and
-    // restarts its delay every time `draft` changes, so typing several digits in a row (each one
-    // is its own valid onChange -- see NumberField) collapses into a single save once they pause,
-    // instead of a save-and-resync-to-watch per keystroke. NumberField/PaceField only ever call
-    // onChange with a fully parsed value, so `draft` is always internally valid here even while a
-    // field's displayed text is transiently blank mid-edit -- nothing blank ever gets this far.
-    LaunchedEffect(draft) {
-        if (draft == saved) return@LaunchedEffect
-        delay(500)
-        repository.save(selectedActivity, draft)
-    }
-
-    // Settings itself starts collapsed (see the "Settings" header below); which single accordion
-    // is open inside it is tracked here rather than by each AccordionSection independently, so
-    // opening one closes whichever other one was already open instead of stacking up.
-    var settingsExpanded by remember { mutableStateOf(false) }
-    var expandedInnerSection by remember { mutableStateOf<String?>(null) }
+    val selectedCardio by remember { SelectedCardioRepository(context.applicationContext).selectedFlow }
+        .collectAsStateWithLifecycle(initialValue = ActivityType.RUN)
 
     Scaffold { innerPadding ->
         Column(
@@ -225,29 +193,55 @@ private fun SettingsScreen(
             }
             HorizontalDivider()
 
-            PhoneTrackingControls(liveRun)
+            MenuListRowWithValue("Select Exercise", Icons.AutoMirrored.Outlined.DirectionsRun, selectedCardio.displayName()) {
+                context.startActivity(Intent(context, SelectExerciseActivity::class.java))
+            }
+            PhoneTrackingControls(liveRun, selectedCardio)
             MenuListRow("Leaderboard", Icons.Outlined.EmojiEvents) { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
             MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart) { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
             MenuListRow("History", Icons.Outlined.History) { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
 
             HorizontalDivider()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { settingsExpanded = !settingsExpanded }
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Settings ${if (settingsExpanded) "▲" else "▼"}",
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
-            HorizontalDivider()
+        }
+    }
+}
 
-            if (!settingsExpanded) return@Column
+/**
+ * The Cardio settings (per-activity heart rate, pace, target, Strava, plus break length and warmup),
+ * shown inside the main Settings screen. Edits save themselves shortly after you stop typing and sync to the watch.
+ */
+@Composable
+internal fun CardioSettingsContent(
+    repository: SettingsRepository,
+    calibrationRepository: CalibrationRepository
+) {
+    val scope = rememberCoroutineScope()
+    // Heart rate / pace / target settings are kept per activity; this picks which one the sections below edit.
+    var selectedActivity by remember { mutableStateOf(ActivityType.RUN) }
+    val saved by remember(selectedActivity) { repository.settingsFlow(selectedActivity) }
+        .collectAsStateWithLifecycle(initialValue = defaultSettingsFor(selectedActivity))
+    val latestCalibration by calibrationRepository.latestFlow.collectAsStateWithLifecycle(initialValue = null)
+    var draft by remember(saved) { mutableStateOf(saved) }
+    val paceUnit = draft.paceUnit
+    val targetDistanceUnit = draft.distanceUnit
 
+    // Auto-saves (and syncs to the watch) shortly after the user stops editing, rather than
+    // requiring an explicit Save tap. Debounced, not immediate: LaunchedEffect cancels and
+    // restarts its delay every time `draft` changes, so typing several digits in a row collapses
+    // into a single save once they pause, instead of a save-and-resync-to-watch per keystroke.
+    // NumberField/PaceField only ever call onChange with a fully parsed value, so `draft` is
+    // always internally valid here -- nothing blank ever gets this far.
+    LaunchedEffect(draft) {
+        if (draft == saved) return@LaunchedEffect
+        delay(500)
+        repository.save(selectedActivity, draft)
+    }
+
+    // Which single section is open is tracked here rather than by each AccordionSection, so
+    // opening one closes whichever other one was open instead of them stacking up.
+    var expandedInnerSection by remember { mutableStateOf<String?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActivityPickerRow(selectedActivity) { selectedActivity = it }
 
             AccordionSection(
@@ -403,7 +397,6 @@ private fun SettingsScreen(
             }
 
             }
-        }
     }
 }
 
@@ -501,9 +494,8 @@ internal fun AlertType.soundPickerLabel(): String = when (this) {
  * is tracking it turns into a Stop button.
  */
 @Composable
-private fun PhoneTrackingControls(liveRun: LiveRunState.Snapshot) {
+private fun PhoneTrackingControls(liveRun: LiveRunState.Snapshot, selected: ActivityType) {
     val context = LocalContext.current
-    var picking by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<ActivityType?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -541,33 +533,10 @@ private fun PhoneTrackingControls(liveRun: LiveRunState.Snapshot) {
             modifier = Modifier.fillMaxWidth()
         ) { Text("Stop phone tracking", color = MaterialTheme.colorScheme.error) }
     } else if (!liveRun.isActive) {
-        // Same filled green button as "Start workout" on the Workout menu.
-        Button(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
+        // Same filled green button as "Start Workout" on the Workout menu; it starts whatever is selected.
+        Button(onClick = { begin(selected) }, modifier = Modifier.fillMaxWidth()) {
             Text("Start Cardio")
         }
-    }
-
-    if (picking) {
-        AlertDialog(
-            onDismissRequest = { picking = false },
-            title = { Text("Start Cardio") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Uses your phone's GPS instead of the watch: pace, distance and alerts work, heart rate doesn't.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    listOf(ActivityType.RUN, ActivityType.WALK, ActivityType.BIKE).forEach { type ->
-                        OutlinedButton(
-                            onClick = { picking = false; begin(type) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(type.displayName()) }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } }
-        )
     }
 }
 

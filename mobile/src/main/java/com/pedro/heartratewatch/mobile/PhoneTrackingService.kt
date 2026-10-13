@@ -100,6 +100,8 @@ class PhoneTrackingService : Service() {
             LiveRunState.Snapshot(isActive = true, activityType = type, phoneSession = true)
         )
 
+        // A stationary bike has no GPS: it is just timed, and its distance is typed in afterwards in History.
+        if (!type.usesGps) return
         try {
             location = LocationDistanceTracker(
                 applicationContext,

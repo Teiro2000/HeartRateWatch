@@ -84,6 +84,23 @@ fun NavButtons(onBack: (() -> Unit)?, onMainMenu: () -> Unit) {
     }
 }
 
+/** A menu row that also shows the current choice (e.g. "Running") before the chevron. */
+@Composable
+fun MenuListRowWithValue(label: String, icon: ImageVector, value: String, onClick: () -> Unit) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Text(">", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 /** One row in a menu list (Cardio and Workout menus share it): label on the left, chevron on the right. */
 @Composable
 fun MenuListRow(label: String, icon: ImageVector, onClick: () -> Unit) {
