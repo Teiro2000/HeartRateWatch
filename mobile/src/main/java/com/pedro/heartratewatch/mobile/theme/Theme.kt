@@ -1,5 +1,7 @@
 package com.pedro.heartratewatch.mobile.theme
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
@@ -10,10 +12,15 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import android.graphics.drawable.ColorDrawable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.ThemePreferenceRepository
 
@@ -136,7 +143,50 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
     val window = (context as? android.app.Activity)?.window
     SideEffect { window?.setBackgroundDrawable(ColorDrawable(colorScheme.background.toArgb())) }
     val typography = if (useLightTheme) MaterialTheme.typography.serifTitles() else MaterialTheme.typography.monospaced()
-    MaterialTheme(colorScheme = colorScheme, typography = typography) {
-        Surface(color = colorScheme.background, content = content)
+    // The wallpaper is drawn once behind everything. Screens are Scaffolds, which paint the scheme's
+    // background color over whatever is behind them, so that role is made transparent and the real
+    // color is painted by the Surface underneath the wallpaper instead.
+    val solidBackground = colorScheme.background
+    MaterialTheme(colorScheme = colorScheme.copy(background = Color.Transparent), typography = typography) {
+        Surface(color = solidBackground) {
+            Box(modifier = Modifier.fillMaxSize().drawBehind { drawWallpaper(useLightTheme) }) {
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Terminal (dark) gets a faint green grid; Sage (light) gets a faint dot matrix. Both are kept low
+ * contrast so text and charts on top stay as readable as on a plain background.
+ */
+private fun DrawScope.drawWallpaper(light: Boolean) {
+    if (light) {
+        val step = 24.dp.toPx()
+        val radius = 1.5.dp.toPx()
+        val color = SageGreen.copy(alpha = 0.20f)
+        var y = step / 2
+        while (y < size.height) {
+            var x = step / 2
+            while (x < size.width) {
+                drawCircle(color, radius, Offset(x, y))
+                x += step
+            }
+            y += step
+        }
+    } else {
+        val step = 32.dp.toPx()
+        val color = PipBoyGreen.copy(alpha = 0.10f)
+        val stroke = 1.dp.toPx()
+        var x = 0f
+        while (x <= size.width) {
+            drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke)
+            x += step
+        }
+        var y = 0f
+        while (y <= size.height) {
+            drawLine(color, Offset(0f, y), Offset(size.width, y), stroke)
+            y += step
+        }
     }
 }
