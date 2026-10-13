@@ -8,6 +8,8 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -20,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.ThemePreferenceRepository
@@ -75,6 +78,12 @@ private fun Typography.monospaced(): Typography = copy(
     labelMedium = labelMedium.copy(fontFamily = FontFamily.Monospace),
     labelSmall = labelSmall.copy(fontFamily = FontFamily.Monospace)
 )
+
+/** Spacing of the dark theme's wallpaper grid. */
+val WALLPAPER_GRID_STEP = 32.dp
+
+/** The wallpaper grid's spacing while one is showing (dark theme), else null. Lets a chart line its axis up with a grid line. */
+val LocalWallpaperGridStep = staticCompositionLocalOf<Dp?> { null }
 
 @Composable
 fun PipBoyTheme(content: @Composable () -> Unit) {
@@ -149,8 +158,10 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
     val solidBackground = colorScheme.background
     MaterialTheme(colorScheme = colorScheme.copy(background = Color.Transparent), typography = typography) {
         Surface(color = solidBackground) {
-            Box(modifier = Modifier.fillMaxSize().drawBehind { drawWallpaper(useLightTheme) }) {
-                content()
+            CompositionLocalProvider(LocalWallpaperGridStep provides (if (useLightTheme) null else WALLPAPER_GRID_STEP)) {
+                Box(modifier = Modifier.fillMaxSize().drawBehind { drawWallpaper(useLightTheme) }) {
+                    content()
+                }
             }
         }
     }
@@ -162,7 +173,7 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
  */
 private fun DrawScope.drawWallpaper(light: Boolean) {
     if (light) return
-    val step = 32.dp.toPx()
+    val step = WALLPAPER_GRID_STEP.toPx()
     val color = PipBoyGreen.copy(alpha = 0.10f)
     val stroke = 1.dp.toPx()
     var x = 0f
