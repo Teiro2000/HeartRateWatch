@@ -18,7 +18,7 @@ private val Context.runHistoryDataStore by preferencesDataStore(name = "run_hist
 /** Header row for exported CSV files -- also documents the column order used internally. */
 private const val CSV_HEADER = "started_at_millis,duration_seconds,avg_bpm,max_bpm,min_bpm," +
     "distance_meters,avg_pace_sec_per_km,best_1km_seconds,best_5km_seconds,best_10km_seconds," +
-    "activity_type"
+    "activity_type,pack_weight_lb,stopped_seconds"
 
 /**
  * Local history of completed runs, populated from the "/run/summary" message
@@ -72,6 +72,16 @@ class RunHistoryRepository(private val context: Context) {
         pushDashboardStatsToWatch()
     }
 
+    /** Sets the weight carried on a walk (rucking), in lb; 0 clears it. */
+    suspend fun updatePackWeight(startedAtMillis: Long, packWeightLb: Float) {
+        context.runHistoryDataStore.edit { prefs ->
+            val updated = parse(prefs[Keys.HISTORY]).map {
+                if (it.startedAtMillis == startedAtMillis) it.copy(packWeightLb = packWeightLb) else it
+            }
+            prefs[Keys.HISTORY] = serialize(updated)
+        }
+    }
+
     /**
      * Merges in runs from an imported file, skipping any whose start time already exists so a
      * re-import (or importing an export that overlaps current history) doesn't create duplicates.
@@ -115,7 +125,7 @@ class RunHistoryRepository(private val context: Context) {
 
     /** Parses a file previously produced by [exportCsv] (the header line is optional/ignored). */
     fun parseCsv(csv: String): List<RunSummary> {
-        val body = csv.lineSequence().filterNot { it == CSV_HEADER }.joinToString("\n")
+        val body = csv.lineSequence().filterNot { it.startsWith("started_at_millis") }.joinToString("\n")
         return parse(body)
     }
 
@@ -124,7 +134,8 @@ class RunHistoryRepository(private val context: Context) {
         return raw.lineSequence().mapNotNull { line ->
             if (line.isBlank()) return@mapNotNull null
             val parts = line.split(",")
-            if (parts.size != 11) return@mapNotNull null
+            // Files and saved history from before walking/biking have 11 columns; newer ones have 13.
+            if (parts.size != 11 && parts.size != 13) return@mapNotNull null
             runCatching {
                 RunSummary(
                     startedAtMillis = parts[0].toLong(),
@@ -138,7 +149,9 @@ class RunHistoryRepository(private val context: Context) {
                     best5kmSeconds = parts[8].toInt().takeIf { it > 0 },
                     best10kmSeconds = parts[9].toInt().takeIf { it > 0 },
                     activityType = runCatching { ActivityType.valueOf(parts[10]) }
-                        .getOrDefault(ActivityType.RUN)
+                        .getOrDefault(ActivityType.RUN),
+                    packWeightLb = parts.getOrNull(11)?.toFloatOrNull() ?: 0f,
+                    stoppedSeconds = parts.getOrNull(12)?.toIntOrNull() ?: 0
                 )
             }.getOrNull()
         }.toList()
@@ -148,6 +161,6 @@ class RunHistoryRepository(private val context: Context) {
         "${it.startedAtMillis},${it.durationSeconds},${it.avgBpm},${it.maxBpm},${it.minBpm}," +
             "${it.distanceMeters},${it.avgPaceSecPerKm ?: -1}," +
             "${it.best1kmSeconds ?: -1},${it.best5kmSeconds ?: -1},${it.best10kmSeconds ?: -1}," +
-            it.activityType.name
+            "${it.activityType.name},${it.packWeightLb},${it.stoppedSeconds}"
     }
 }

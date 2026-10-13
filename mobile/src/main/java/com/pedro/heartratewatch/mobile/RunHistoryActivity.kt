@@ -54,6 +54,7 @@ import com.pedro.heartratewatch.shared.RunSummary
 import com.pedro.heartratewatch.shared.TrainingSettings
 import com.pedro.heartratewatch.shared.formatDistance
 import com.pedro.heartratewatch.shared.formatPace
+import com.pedro.heartratewatch.shared.formatSpeed
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -93,6 +94,10 @@ private fun RunHistoryScreen(
     val distanceTarget = settings.distanceTargetMeters
     val snackbarHostState = remember { SnackbarHostState() }
     var editingDistanceFor by remember { mutableStateOf<RunSummary?>(null) }
+    var editingPackWeightFor by remember { mutableStateOf<RunSummary?>(null) }
+    // Pack weight uses the same lb/kg choice as the Workout side.
+    val weightUnit by remember { WorkoutRepository(context.applicationContext).weightUnitFlow }
+        .collectAsStateWithLifecycle(initialValue = WeightUnit.LB)
     var confirmRemoveAll by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -128,6 +133,18 @@ private fun RunHistoryScreen(
                 )
             )
         }
+    }
+
+    editingPackWeightFor?.let { run ->
+        PackWeightDialog(
+            run = run,
+            unit = weightUnit,
+            onConfirm = { lb ->
+                scope.launch { repository.updatePackWeight(run.startedAtMillis, lb) }
+                editingPackWeightFor = null
+            },
+            onDismiss = { editingPackWeightFor = null }
+        )
     }
 
     editingDistanceFor?.let { run ->
@@ -190,6 +207,8 @@ private fun RunHistoryScreen(
                             paceUnit = settings.paceUnit,
                             distanceUnit = settings.distanceUnit,
                             onEditDistance = { editingDistanceFor = run },
+                            weightUnit = weightUnit,
+                            onEditPackWeight = { editingPackWeightFor = run },
                             onDiscard = {
                                 scope.launch {
                                     repository.removeRun(run.startedAtMillis)
@@ -218,6 +237,8 @@ private fun RunRow(
     paceUnit: DistanceUnit,
     distanceUnit: DistanceUnit,
     onEditDistance: () -> Unit,
+    weightUnit: WeightUnit,
+    onEditPackWeight: () -> Unit,
     onDiscard: () -> Unit
 ) {
     val isBike = run.activityType == ActivityType.STATIONARY_BIKE
@@ -246,8 +267,11 @@ private fun RunRow(
                 }
                 Button(onClick = onDiscard) { Text("Discard") }
             }
-            Text(if (isBike) "Stationary bike" else "Run", style = MaterialTheme.typography.labelLarge)
+            Text(run.activityType.displayName(), style = MaterialTheme.typography.labelLarge)
             Text("Duration: %d:%02d".format(run.durationSeconds / 60, run.durationSeconds % 60))
+            if (run.stoppedSeconds > 0) {
+                Text("Time stopped: %d:%02d".format(run.stoppedSeconds / 60, run.stoppedSeconds % 60))
+            }
             Text("Avg ${run.avgBpm} bpm, max ${run.maxBpm} bpm, min ${run.minBpm} bpm")
             if (isBike) {
                 Text(
@@ -259,10 +283,53 @@ private fun RunRow(
                 }
             } else {
                 Text("Distance: ${formatDistance(run.distanceMeters, distanceUnit)}")
-                run.avgPaceSecPerKm?.let { Text("Avg pace: ${formatPace(it, paceUnit)}") }
+                run.avgPaceSecPerKm?.let {
+                    if (run.activityType.showsSpeed) Text("Avg speed (moving): ${formatSpeed(it, paceUnit)}")
+                    else Text("Avg pace: ${formatPace(it, paceUnit)}")
+                }
+                if (run.activityType == ActivityType.WALK) {
+                    if (run.packWeightLb > 0f) {
+                        val shown = weightUnit.fromLb(run.packWeightLb.toDouble())
+                        Text("Pack weight: ${formatWeight(shown)} ${weightUnit.symbol}")
+                    }
+                    Button(onClick = onEditPackWeight) {
+                        Text(if (run.packWeightLb > 0f) "Edit pack weight" else "Add pack weight")
+                    }
+                }
             }
         }
     }
+}
+
+/** The weight carried on a walk (rucking), typed in the Workout side's lb/kg unit; stored in lb. */
+@Composable
+private fun PackWeightDialog(run: RunSummary, unit: WeightUnit, onConfirm: (lb: Float) -> Unit, onDismiss: () -> Unit) {
+    var text by remember {
+        mutableStateOf(if (run.packWeightLb > 0f) formatWeight(unit.fromLb(run.packWeightLb.toDouble())) else "")
+    }
+    val value = text.replace(',', '.').toDoubleOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pack weight") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Weight carried (${unit.symbol}), 0 to clear") },
+                isError = text.isNotBlank() && value == null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = value != null && value >= 0,
+                onClick = { onConfirm(unit.toLb(value!!).toFloat()) }
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 /** Typed-in distance for a stationary bike ride, entered as whatever the bike's display shows. */

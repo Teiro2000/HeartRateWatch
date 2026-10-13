@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
+import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.DistanceUnit
 import kotlinx.coroutines.launch
 import java.time.ZoneId
@@ -51,10 +52,12 @@ import java.util.Locale
 private val MONTH_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM yy")
 
 /** What the chart shows. More kinds of cardio will be added here as the app learns them. */
-private enum class CardioKind(val label: String) {
-    ALL("All cardio"),
-    RUN("Running"),
-    BIKE("Stationary bike")
+private enum class CardioKind(val label: String, val type: ActivityType?) {
+    ALL("All cardio", null),
+    RUN("Running", ActivityType.RUN),
+    WALK("Walking", ActivityType.WALK),
+    BIKE("Biking", ActivityType.BIKE),
+    STATIONARY_BIKE("Stationary bike", ActivityType.STATIONARY_BIKE)
 }
 
 /**
@@ -166,11 +169,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             val zone = remember { ZoneId.systemDefault() }
             val lines = listOf(
                 series(MaterialTheme.colorScheme.primary) {
-                    when (kind) {
-                        CardioKind.ALL -> it.totalMeters
-                        CardioKind.RUN -> it.runMeters
-                        CardioKind.BIKE -> it.bikeMeters
-                    }
+                    kind.type?.let { type -> it.of(type) } ?: it.totalMeters
                 }
             )
             if (visible.isEmpty()) Text("No workouts in that range.") else {
@@ -192,8 +191,9 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(month.month.format(MONTH_LABEL_FORMAT), style = MaterialTheme.typography.titleSmall)
-                        Text("Running: %.1f %s".format(display(month.runMeters), unit.symbol), style = MaterialTheme.typography.bodySmall)
-                        Text("Bike: %.1f %s".format(display(month.bikeMeters), unit.symbol), style = MaterialTheme.typography.bodySmall)
+                        ACTIVITY_ORDER.forEach { type ->
+                            Text("${type.displayName()}: %.1f %s".format(display(month.of(type)), unit.symbol), style = MaterialTheme.typography.bodySmall)
+                        }
                         Text("Total: %.1f %s".format(display(month.totalMeters), unit.symbol), style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -203,15 +203,19 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             Text("Totals", style = MaterialTheme.typography.titleMedium)
             totals.asReversed().forEach {
                 Text(
-                    "%s: run %.1f, bike %.1f, total %.1f %s".format(
-                        it.month, display(it.runMeters), display(it.bikeMeters), display(it.totalMeters), unit.symbol
+                    "%s: run %.1f, walk %.1f, bike %.1f, stationary %.1f, total %.1f %s".format(
+                        it.month, display(it.of(ActivityType.RUN)), display(it.of(ActivityType.WALK)),
+                        display(it.of(ActivityType.BIKE)), display(it.of(ActivityType.STATIONARY_BIKE)),
+                        display(it.totalMeters), unit.symbol
                     )
                 )
             }
             Text(
-                "All time: run %.1f, bike %.1f, total %.1f %s".format(
-                    display(totals.sumOf { it.runMeters }),
-                    display(totals.sumOf { it.bikeMeters }),
+                "All time: run %.1f, walk %.1f, bike %.1f, stationary %.1f, total %.1f %s".format(
+                    display(totals.sumOf { it.of(ActivityType.RUN) }),
+                    display(totals.sumOf { it.of(ActivityType.WALK) }),
+                    display(totals.sumOf { it.of(ActivityType.BIKE) }),
+                    display(totals.sumOf { it.of(ActivityType.STATIONARY_BIKE) }),
                     display(totals.sumOf { it.totalMeters }),
                     unit.symbol
                 ),
