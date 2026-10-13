@@ -7,12 +7,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Process-wide holder for the watch's live run state (see ExerciseSessionService.pushLiveStatsToPhone
- * on :wear, pushed over LIVE_RUN_SYNC), mirrored onto the phone's home screen -- mainly so you can
- * glance at the phone to confirm the watch is still actually tracking (e.g. with its own screen
- * off) without having to wake the watch to check. Ephemeral/in-memory only: there's nothing to
- * restore across a phone app restart, since the watch keeps re-pushing throughout the whole
- * session regardless of whether the phone app happens to be open to see it.
+ * Process-wide holder for the live session shown on the Cardio menu. Normally that's the watch's
+ * run (see ExerciseSessionService.pushLiveStatsToPhone on :wear, pushed over LIVE_RUN_SYNC),
+ * mirrored onto the phone's home screen -- mainly so you can glance at the phone to confirm the
+ * watch is still actually tracking (e.g. with its own screen off) without having to wake the watch
+ * to check. While the phone is tracking a session by itself (see [PhoneTrackingService]) it owns
+ * this state instead, and anything the watch pushes is ignored. Ephemeral/in-memory only: there's
+ * nothing to restore across a phone app restart, since the watch keeps re-pushing throughout the
+ * whole session regardless of whether the phone app happens to be open to see it.
  */
 object LiveRunState {
 
@@ -21,13 +23,16 @@ object LiveRunState {
         val activityType: ActivityType = ActivityType.RUN,
         val currentBpm: Int? = null,
         val distanceMeters: Float = 0f,
-        val currentPaceSecPerKm: Int? = null
+        val currentPaceSecPerKm: Int? = null,
+        /** True when this session is being tracked by the phone itself (no heart rate). */
+        val phoneSession: Boolean = false
     )
 
     private val _state = MutableStateFlow(Snapshot())
     val state: StateFlow<Snapshot> = _state.asStateFlow()
 
     fun applyFrom(map: DataMap) {
+        if (_state.value.phoneSession) return
         _state.value = Snapshot(
             isActive = map.getBoolean("is_active"),
             activityType = map.getString("activity_type")?.let {
@@ -37,5 +42,13 @@ object LiveRunState {
             distanceMeters = map.getFloat("distance_meters"),
             currentPaceSecPerKm = map.getInt("current_pace_sec_per_km").takeIf { it > 0 }
         )
+    }
+
+    fun setPhoneSession(snapshot: Snapshot) {
+        _state.value = snapshot
+    }
+
+    fun clearPhoneSession() {
+        _state.value = Snapshot()
     }
 }
