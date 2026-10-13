@@ -7,8 +7,12 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.util.Locale
 
-data class MonthTotal(val month: YearMonth, val runMeters: Double, val bikeMeters: Double) {
-    val totalMeters: Double get() = runMeters + bikeMeters
+data class MonthTotal(val month: YearMonth, val meters: Map<ActivityType, Double>) {
+    /** Distance covered in this month by one kind of activity. */
+    fun of(type: ActivityType): Double = meters[type] ?: 0.0
+
+    val runMeters: Double get() = of(ActivityType.RUN)
+    val totalMeters: Double get() = meters.values.sum()
 }
 
 /**
@@ -30,10 +34,9 @@ fun monthlyTotals(runs: List<RunSummary>): List<MonthTotal> {
         val inMonth = byMonth[month].orEmpty()
         totals += MonthTotal(
             month = month,
-            runMeters = inMonth.filter { it.activityType == ActivityType.RUN }
-                .sumOf { it.distanceMeters.toDouble() },
-            bikeMeters = inMonth.filter { it.activityType == ActivityType.STATIONARY_BIKE }
-                .sumOf { it.distanceMeters.toDouble() }
+            meters = ActivityType.entries.associateWith { type ->
+                inMonth.filter { it.activityType == type }.sumOf { it.distanceMeters.toDouble() }
+            }
         )
         month = month.plusMonths(1)
     }
@@ -42,10 +45,11 @@ fun monthlyTotals(runs: List<RunSummary>): List<MonthTotal> {
 
 /** Always kilometers, for spreadsheets/records regardless of the on-screen unit. */
 fun monthlyTotalsCsv(totals: List<MonthTotal>): String =
-    "month,run_km,bike_km,total_km\n" + totals.joinToString("\n") {
+    "month,run_km,walk_km,bike_km,stationary_bike_km,total_km\n" + totals.joinToString("\n") {
         String.format(
-            Locale.US, "%s,%.2f,%.2f,%.2f",
-            it.month, it.runMeters / 1000, it.bikeMeters / 1000, it.totalMeters / 1000
+            Locale.US, "%s,%.2f,%.2f,%.2f,%.2f,%.2f",
+            it.month, it.of(ActivityType.RUN) / 1000, it.of(ActivityType.WALK) / 1000,
+            it.of(ActivityType.BIKE) / 1000, it.of(ActivityType.STATIONARY_BIKE) / 1000, it.totalMeters / 1000
         )
     }
 
