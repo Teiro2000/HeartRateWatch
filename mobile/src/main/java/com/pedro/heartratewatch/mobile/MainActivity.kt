@@ -203,7 +203,7 @@ private fun SettingsScreen(
     // is open inside it is tracked here rather than by each AccordionSection independently, so
     // opening one closes whichever other one was already open instead of stacking up.
     var settingsExpanded by remember { mutableStateOf(false) }
-    var expandedInnerSection by remember { mutableStateOf<String?>("General") }
+    var expandedInnerSection by remember { mutableStateOf<String?>(null) }
 
     Scaffold { innerPadding ->
         Column(
