@@ -172,16 +172,19 @@ private fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 16.dp),
+            // Same spacing as the Workout menu.
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            NavButtons(onBack = null, onMainMenu = { goToMainMenu(context) })
-            Text(
-                "Pulse Guard",
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                NavButtons(onBack = null, onMainMenu = { goToMainMenu(context) })
+                Text(
+                    "Pulse Guard",
+                    style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                )
+            }
             HorizontalDivider()
 
             if (liveRun.isActive) {
@@ -196,10 +199,10 @@ private fun SettingsScreen(
             }
             HorizontalDivider()
 
+            PhoneTrackingControls(liveRun, selectedCardio)
             MenuListRowWithValue("Select Exercise", Icons.AutoMirrored.Outlined.DirectionsRun, selectedCardio.displayName()) {
                 context.startActivity(Intent(context, SelectExerciseActivity::class.java))
             }
-            PhoneTrackingControls(liveRun, selectedCardio)
             MenuListRow("Leaderboard", Icons.Outlined.EmojiEvents) { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
             MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart) { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
             MenuListRow("History", Icons.Outlined.History) { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
@@ -847,7 +850,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
  * so they can never drift from what Run History/the leaderboard/the monthly chart themselves show. */
 @Composable
 private fun DashboardStatsRow(thisMonth: String, lastWorkout: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
         StatItem("This month", thisMonth)
         StatItem("Last cardio session", lastWorkout)
     }
@@ -858,7 +861,7 @@ private fun DashboardStatsRow(thisMonth: String, lastWorkout: String) {
  * the watch is still actually tracking (e.g. with its own screen off) without waking the watch. */
 @Composable
 private fun LiveRunStatsRow(state: LiveRunState.Snapshot, settings: TrainingSettings) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         if (!state.phoneSession) StatItem("BPM", state.currentBpm?.toString() ?: "--")
         if (state.activityType.usesGps) {
             if (state.activityType.showsSpeed) {
