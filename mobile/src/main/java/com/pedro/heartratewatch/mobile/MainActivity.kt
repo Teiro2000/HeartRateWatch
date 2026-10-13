@@ -574,15 +574,16 @@ private fun PhoneTrackingControls(liveRun: LiveRunState.Snapshot) {
             modifier = Modifier.fillMaxWidth()
         ) { Text("Stop phone tracking", color = MaterialTheme.colorScheme.error) }
     } else if (!liveRun.isActive) {
-        OutlinedButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Track with phone (no watch)")
+        // Same filled green button as "Start workout" on the Workout menu.
+        Button(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Start cardio")
         }
     }
 
     if (picking) {
         AlertDialog(
             onDismissRequest = { picking = false },
-            title = { Text("Track with phone") },
+            title = { Text("Start cardio") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
