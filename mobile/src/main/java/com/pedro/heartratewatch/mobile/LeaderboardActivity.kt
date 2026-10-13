@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +69,8 @@ private fun LeaderboardScreen(repository: RunHistoryRepository, settingsReposito
     val context = LocalContext.current
     val allWorkouts by repository.historyFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(initialValue = TrainingSettings())
+    val displayOverride by remember { DisplayDistanceUnitRepository(context.applicationContext).overrideFlow }
+        .collectAsStateWithLifecycle(initialValue = null)
 
     // Bike rides have no splits or pace and would only pollute the running sections.
     val runs = allWorkouts.filter { it.activityType == ActivityType.RUN }
@@ -116,7 +119,7 @@ private fun LeaderboardScreen(repository: RunHistoryRepository, settingsReposito
                 } else {
                     bikeRides.forEachIndexed { index, ride ->
                         val date = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(ride.startedAtMillis))
-                        LeaderboardRow("${index + 1}. ${formatDistance(ride.distanceMeters, settings.distanceUnit)}", date)
+                        LeaderboardRow("${index + 1}. ${formatDistance(ride.distanceMeters, displayOverride ?: settings.distanceUnit)}", date)
                     }
                 }
             }

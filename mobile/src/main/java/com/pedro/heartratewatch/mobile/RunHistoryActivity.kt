@@ -96,6 +96,9 @@ private fun RunHistoryScreen(
     LaunchedEffect(Unit) { repository.awardStarsOnce() }
     val snackbarHostState = remember { SnackbarHostState() }
     var editingDistanceFor by remember { mutableStateOf<RunSummary?>(null) }
+    // The unit picked in the main Settings for showing distances beats the target's unit.
+    val displayOverride by remember { DisplayDistanceUnitRepository(context.applicationContext).overrideFlow }
+        .collectAsStateWithLifecycle(initialValue = null)
     var editingPackWeightFor by remember { mutableStateOf<RunSummary?>(null) }
     // Pack weight uses the same lb/kg choice as the Workout side.
     val weightUnit by remember { WorkoutRepository(context.applicationContext).weightUnitFlow }
@@ -207,7 +210,7 @@ private fun RunHistoryScreen(
                             run,
                             reachedTarget = run.reachedTarget,
                             paceUnit = settings.paceUnit,
-                            distanceUnit = settings.distanceUnit,
+                            distanceUnit = displayOverride ?: settings.distanceUnit,
                             onEditDistance = { editingDistanceFor = run },
                             weightUnit = weightUnit,
                             onEditPackWeight = { editingPackWeightFor = run },
