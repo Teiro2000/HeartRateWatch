@@ -7,6 +7,7 @@ import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
 import androidx.wear.tiles.TileService
+import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.DataLayerPaths
 import com.pedro.heartratewatch.shared.DistanceUnit
 import com.pedro.heartratewatch.shared.ThresholdMode
@@ -52,35 +53,41 @@ class SettingsSyncListenerService : WearableListenerService() {
 
         private fun handleSettingsSync(context: Context, event: DataEvent) {
             val map = DataMapItem.fromDataItem(event.dataItem).dataMap
-            Log.d(
-                "SettingsSync",
-                "Received settings from phone: upper_bpm=${map.getInt("upper_bpm")}"
-            )
-            val settings = TrainingSettings(
-                heartRateAlertsEnabled = map.getBoolean("hr_alerts_enabled"),
-                paceAlertsEnabled = map.getBoolean("pace_alerts_enabled"),
-                lowerThresholdBpm = map.getInt("lower_bpm"),
-                upperThresholdBpm = map.getInt("upper_bpm"),
-                thresholdMode = map.getString("threshold_mode")?.let {
-                    runCatching { ThresholdMode.valueOf(it) }.getOrNull()
-                } ?: ThresholdMode.BPM,
-                lowerThresholdPercent = map.getInt("lower_percent"),
-                upperThresholdPercent = map.getInt("upper_percent"),
-                manualMaxHrBpm = map.getInt("manual_max_hr").takeIf { it > 0 },
-                fastestPaceSecPerKm = map.getInt("fastest_pace_sec_per_km"),
-                slowestPaceSecPerKm = map.getInt("slowest_pace_sec_per_km"),
-                warmupSeconds = map.getInt("warmup_seconds"),
-                breakTimerSeconds = map.getInt("break_seconds"),
-                distanceTargetMeters = map.getFloat("target_meters").takeIf { it > 0f },
-                launchStravaOnStart = map.getBoolean("launch_strava_on_start"),
-                paceUnit = map.getString("pace_unit")?.let { runCatching { DistanceUnit.valueOf(it) }.getOrNull() }
-                    ?: DistanceUnit.KILOMETERS,
-                distanceUnit = map.getString("distance_unit")?.let { runCatching { DistanceUnit.valueOf(it) }.getOrNull() }
-                    ?: DistanceUnit.KILOMETERS
-            )
+            Log.d("SettingsSync", "Received settings from phone")
+            val paceUnit = map.getString("pace_unit")?.let { runCatching { DistanceUnit.valueOf(it) }.getOrNull() }
+                ?: DistanceUnit.KILOMETERS
+            val distanceUnit = map.getString("distance_unit")?.let { runCatching { DistanceUnit.valueOf(it) }.getOrNull() }
+                ?: DistanceUnit.KILOMETERS
+
+            // Heart rate / pace / target come once per activity ("<field>_<ACTIVITY>"); the rest is shared.
+            val all = ActivityType.entries.mapNotNull { type ->
+                if (!map.containsKey("lower_bpm_${type.name}")) return@mapNotNull null
+                fun k(name: String) = "${name}_${type.name}"
+                type to TrainingSettings(
+                    heartRateAlertsEnabled = map.getBoolean(k("hr_alerts_enabled")),
+                    paceAlertsEnabled = map.getBoolean(k("pace_alerts_enabled")),
+                    lowerThresholdBpm = map.getInt(k("lower_bpm")),
+                    upperThresholdBpm = map.getInt(k("upper_bpm")),
+                    thresholdMode = map.getString(k("threshold_mode"))?.let {
+                        runCatching { ThresholdMode.valueOf(it) }.getOrNull()
+                    } ?: ThresholdMode.BPM,
+                    lowerThresholdPercent = map.getInt(k("lower_percent")),
+                    upperThresholdPercent = map.getInt(k("upper_percent")),
+                    manualMaxHrBpm = map.getInt("manual_max_hr").takeIf { it > 0 },
+                    fastestPaceSecPerKm = map.getInt(k("fastest_pace_sec_per_km")),
+                    slowestPaceSecPerKm = map.getInt(k("slowest_pace_sec_per_km")),
+                    warmupSeconds = map.getInt("warmup_seconds"),
+                    breakTimerSeconds = map.getInt("break_seconds"),
+                    distanceTargetMeters = map.getFloat(k("target_meters")).takeIf { it > 0f },
+                    launchStravaOnStart = map.getBoolean("launch_strava_on_start"),
+                    paceUnit = paceUnit,
+                    distanceUnit = distanceUnit
+                )
+            }.toMap()
+            if (all.isEmpty()) return
 
             CoroutineScope(Dispatchers.IO).launch {
-                SettingsStore(context).save(settings)
+                SettingsStore(context).saveAll(all)
             }
         }
 

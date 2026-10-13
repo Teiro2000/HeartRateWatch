@@ -23,7 +23,13 @@ data class RunSummary(
     val best1kmSeconds: Int? = null,
     val best5kmSeconds: Int? = null,
     val best10kmSeconds: Int? = null,
-    val activityType: ActivityType = ActivityType.RUN
+    val activityType: ActivityType = ActivityType.RUN,
+    // Weight carried on a walk (rucking), in lb like every stored weight; entered on the phone
+    // afterwards, so the watch always sends 0. 0 means none.
+    val packWeightLb: Float = 0f,
+    // Time spent stopped (red lights and the like) on an outdoor bike ride; left out of the average
+    // speed. 0 for every other activity.
+    val stoppedSeconds: Int = 0
 ) {
     fun toBytes(): ByteArray = ByteBuffer.allocate(BYTE_SIZE)
         .putLong(startedAtMillis)
@@ -39,10 +45,12 @@ data class RunSummary(
         .putInt(best5kmSeconds ?: 0)
         .putInt(best10kmSeconds ?: 0)
         .putInt(activityType.ordinal)
+        .putFloat(packWeightLb)
+        .putInt(stoppedSeconds)
         .array()
 
     companion object {
-        const val BYTE_SIZE = 8 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4
+        const val BYTE_SIZE = 8 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4
 
         fun fromBytes(bytes: ByteArray): RunSummary {
             val buffer = ByteBuffer.wrap(bytes)
@@ -57,7 +65,9 @@ data class RunSummary(
                 best1kmSeconds = buffer.int.takeIf { it > 0 },
                 best5kmSeconds = buffer.int.takeIf { it > 0 },
                 best10kmSeconds = buffer.int.takeIf { it > 0 },
-                activityType = ActivityType.entries.getOrElse(buffer.int) { ActivityType.RUN }
+                activityType = ActivityType.entries.getOrElse(buffer.int) { ActivityType.RUN },
+                packWeightLb = buffer.float,
+                stoppedSeconds = buffer.int
             )
         }
     }

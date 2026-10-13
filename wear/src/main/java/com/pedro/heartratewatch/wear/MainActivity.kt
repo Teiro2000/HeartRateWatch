@@ -32,8 +32,11 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.Text
 import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.TrainingSettings
+import com.pedro.heartratewatch.shared.defaultSettingsFor
 import com.pedro.heartratewatch.shared.formatDistance
 import com.pedro.heartratewatch.shared.formatPace
+import com.pedro.heartratewatch.shared.formatSpeed
+import com.pedro.heartratewatch.shared.speedUnitLabel
 import com.pedro.heartratewatch.wear.theme.PulseGuardTheme
 
 class MainActivity : ComponentActivity() {
@@ -76,8 +79,11 @@ private fun RunScreen(
     val context = LocalContext.current
     val state by HeartRateRepository.state.collectAsState()
     val latestCalibration by calibrationStore.latestFlow.collectAsState(initial = null)
-    val settings by settingsStore.settingsFlow.collectAsState(initial = TrainingSettings())
     val selectedType by activityModeStore.selectedFlow.collectAsState(initial = ActivityType.RUN)
+    // Thresholds are per activity: the running session uses running's, a walk uses walking's.
+    val shownType = if (state.isActive) state.activityType else selectedType
+    val settings by remember(shownType) { settingsStore.settingsFlow(shownType) }
+        .collectAsState(initial = defaultSettingsFor(shownType))
 
     // ACCESS_FINE_LOCATION is requested unconditionally (not just when Settings' GPS toggle is
     // currently on) -- that toggle syncs in from the phone at any time without re-showing this
@@ -117,10 +123,14 @@ private fun RunScreen(
             state.currentBpm?.let { "$it bpm" } ?: "-- bpm",
             heartRateStatus(state.currentBpm, settings, maxHrBpm)
         )
-        if (state.activityType == ActivityType.RUN) {
+        if (state.activityType.usesGps) {
             Text(text = formatDistance(state.distanceMeters, settings.distanceUnit))
             StatusText(
-                state.currentPaceSecPerKm?.let { formatPace(it, settings.paceUnit) } ?: "-- /${settings.paceUnit.symbol}",
+                if (state.activityType.showsSpeed) {
+                    state.currentPaceSecPerKm?.let { formatSpeed(it, settings.paceUnit) } ?: "-- ${speedUnitLabel(settings.paceUnit)}"
+                } else {
+                    state.currentPaceSecPerKm?.let { formatPace(it, settings.paceUnit) } ?: "-- /${settings.paceUnit.symbol}"
+                },
                 paceStatus(state.currentPaceSecPerKm, settings)
             )
         }
@@ -139,7 +149,7 @@ private fun RunScreen(
                 // stopped too, not just PulseGuard's.
                 launchStravaIfEnabled(context, settings)
             }) {
-                Text(if (state.activityType == ActivityType.STATIONARY_BIKE) "Stop ride" else "Stop run")
+                Text(state.activityType.stopLabel())
             }
         } else {
             Button(onClick = {

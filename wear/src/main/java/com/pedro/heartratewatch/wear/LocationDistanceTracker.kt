@@ -27,6 +27,7 @@ import kotlin.math.max
  */
 class LocationDistanceTracker(
     context: Context,
+    private val maxSpeedMetersPerSecond: Float = MAX_FOOT_SPEED_METERS_PER_SECOND,
     private val onDistance: (Float) -> Unit
 ) {
     private val client = LocationServices.getFusedLocationProviderClient(context)
@@ -75,7 +76,7 @@ class LocationDistanceTracker(
         // Faster than any human can run (same ceiling as MIN_PLAUSIBLE_PACE_SEC_PER_KM): a bad fix,
         // not real movement. Dropped without moving the anchor, so the next good fix is measured
         // against the last trusted position over the real elapsed time.
-        if (delta / seconds > MAX_SPEED_METERS_PER_SECOND) {
+        if (delta / seconds > maxSpeedMetersPerSecond) {
             Log.i(TAG, "dropped: implausible speed ${delta / seconds} m/s")
             return
         }
@@ -95,12 +96,15 @@ class LocationDistanceTracker(
         onDistance(totalMeters)
     }
 
-    private companion object {
-        const val TAG = "GpsDist"
-        const val UPDATE_INTERVAL_MS = 1_000L
-        const val MAX_ACCURACY_METERS = 25f
-        const val MIN_STEP_METERS = 3f
-        const val MIN_MOVING_SPEED_METERS_PER_SECOND = 0.8f
-        const val MAX_SPEED_METERS_PER_SECOND = 10f
+    companion object {
+        /** The ceiling for a runner or walker: faster than this is a bad fix, not movement. */
+        const val MAX_FOOT_SPEED_METERS_PER_SECOND = 10f
+        /** A cyclist's ceiling (90 km/h) -- fast descents go well past a runner's. */
+        const val MAX_BIKE_SPEED_METERS_PER_SECOND = 25f
+        private const val TAG = "GpsDist"
+        private const val UPDATE_INTERVAL_MS = 1_000L
+        private const val MAX_ACCURACY_METERS = 25f
+        private const val MIN_STEP_METERS = 3f
+        private const val MIN_MOVING_SPEED_METERS_PER_SECOND = 0.8f
     }
 }

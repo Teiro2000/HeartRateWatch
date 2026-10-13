@@ -2,6 +2,7 @@ package com.pedro.heartratewatch.wear
 
 import android.content.Intent
 import android.os.Bundle
+import com.pedro.heartratewatch.shared.ActivityType
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -53,7 +54,7 @@ class TileActionActivity : ComponentActivity() {
                 // Brings Strava back to the foreground so you can hit its own Finish/stop -- same
                 // toggle as starting, since the point of turning it on is having Strava tracking
                 // alongside PulseGuard for the whole run, not just at the start of it.
-                val settings = SettingsStore(applicationContext).settingsFlow.first()
+                val settings = SettingsStore(applicationContext).settingsFlow(ActivityType.RUN).first()
                 launchStravaIfEnabled(this@TileActionActivity, settings)
                 finish()
             }
@@ -73,7 +74,7 @@ class TileActionActivity : ComponentActivity() {
                     HeartRateRepository.state.first { it.isActive }
                 }
                 TileService.getUpdater(applicationContext).requestUpdate(HeartRateTileService::class.java)
-                val settings = SettingsStore(applicationContext).settingsFlow.first()
+                val settings = SettingsStore(applicationContext).settingsFlow(type).first()
                 launchStravaIfEnabled(this@TileActionActivity, settings)
                 finish()
             }
