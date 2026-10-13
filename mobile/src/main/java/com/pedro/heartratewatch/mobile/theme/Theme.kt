@@ -157,36 +157,22 @@ fun PipBoyTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * Terminal (dark) gets a faint green grid; Sage (light) gets a faint dot matrix. Both are kept low
- * contrast so text and charts on top stay as readable as on a plain background.
+ * Terminal (dark) gets a faint green grid, kept low contrast so text and charts on top stay as
+ * readable as on a plain background. Sage (light) stays plain.
  */
 private fun DrawScope.drawWallpaper(light: Boolean) {
-    if (light) {
-        val step = 24.dp.toPx()
-        val radius = 1.5.dp.toPx()
-        val color = SageGreen.copy(alpha = 0.20f)
-        var y = step / 2
-        while (y < size.height) {
-            var x = step / 2
-            while (x < size.width) {
-                drawCircle(color, radius, Offset(x, y))
-                x += step
-            }
-            y += step
-        }
-    } else {
-        val step = 32.dp.toPx()
-        val color = PipBoyGreen.copy(alpha = 0.10f)
-        val stroke = 1.dp.toPx()
-        var x = 0f
-        while (x <= size.width) {
-            drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke)
-            x += step
-        }
-        var y = 0f
-        while (y <= size.height) {
-            drawLine(color, Offset(0f, y), Offset(size.width, y), stroke)
-            y += step
-        }
+    if (light) return
+    val step = 32.dp.toPx()
+    val color = PipBoyGreen.copy(alpha = 0.10f)
+    val stroke = 1.dp.toPx()
+    var x = 0f
+    while (x <= size.width) {
+        drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke)
+        x += step
+    }
+    var y = 0f
+    while (y <= size.height) {
+        drawLine(color, Offset(0f, y), Offset(size.width, y), stroke)
+        y += step
     }
 }
