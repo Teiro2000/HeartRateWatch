@@ -258,6 +258,8 @@ private fun SettingsScreen(
 
             if (!settingsExpanded) return@Column
 
+            ActivityPickerRow(selectedActivity) { selectedActivity = it }
+
             AccordionSection(
                 "General",
                 expanded = expandedInnerSection == "General",
@@ -282,8 +284,6 @@ private fun SettingsScreen(
                     draft = draft.copy(launchStravaOnStart = it)
                 }
             }
-
-            ActivityPickerRow(selectedActivity) { selectedActivity = it }
 
             AccordionSection(
                 "Heart rate",
@@ -611,8 +611,17 @@ private fun ActivityPickerRow(selected: ActivityType, onSelect: (ActivityType) -
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Settings below are saved separately for each activity:", style = MaterialTheme.typography.bodySmall)
         Box {
-            OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selected.displayName() + "  v")
+            // Dark green like the other main buttons, with the same arrow the sections use: down
+            // while closed, up while the list is open.
+            Button(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(selected.displayName())
+                    Text(if (open) "▲" else "▼")
+                }
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 ACTIVITY_ORDER.forEach { type ->
