@@ -17,6 +17,7 @@ import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.DataLayerPaths
+import com.pedro.heartratewatch.shared.LocationDistanceTracker
 import com.pedro.heartratewatch.shared.RunSummary
 import com.pedro.heartratewatch.shared.TrainingSettings
 import com.pedro.heartratewatch.wear.tile.HeartRateTileService

@@ -1,4 +1,4 @@
-package com.pedro.heartratewatch.wear
+package com.pedro.heartratewatch.shared
 
 import android.annotation.SuppressLint
 import android.content.Context

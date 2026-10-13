@@ -17,3 +17,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
+
+dependencies {
+    // The GPS distance tracker (LocationDistanceTracker) is used by both the watch session service
+    // and the phone's own tracking service.
+    api("com.google.android.gms:play-services-location:21.3.0")
+}

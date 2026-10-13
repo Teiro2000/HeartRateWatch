@@ -272,7 +272,8 @@ private fun RunRow(
             if (run.stoppedSeconds > 0) {
                 Text("Time stopped: %d:%02d".format(run.stoppedSeconds / 60, run.stoppedSeconds % 60))
             }
-            Text("Avg ${run.avgBpm} bpm, max ${run.maxBpm} bpm, min ${run.minBpm} bpm")
+            // Sessions tracked by the phone alone have no heart rate.
+            if (run.avgBpm > 0) Text("Avg ${run.avgBpm} bpm, max ${run.maxBpm} bpm, min ${run.minBpm} bpm")
             if (isBike) {
                 Text(
                     if (run.distanceMeters > 0f) "Distance: ${formatDistance(run.distanceMeters, distanceUnit)}"

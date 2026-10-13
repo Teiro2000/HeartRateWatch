@@ -2,6 +2,11 @@ package com.pedro.heartratewatch.mobile
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
+import androidx.core.content.ContextCompat
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -230,6 +235,7 @@ private fun SettingsScreen(
             }
             HorizontalDivider()
 
+            PhoneTrackingControls(liveRun)
             MenuListRow("Leaderboard", Icons.Outlined.EmojiEvents) { context.startActivity(Intent(context, LeaderboardActivity::class.java)) }
             MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart) { context.startActivity(Intent(context, MonthlyChartActivity::class.java)) }
             MenuListRow("History", Icons.Outlined.History) { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
@@ -520,6 +526,81 @@ private fun AlertType.soundPickerLabel(): String = when (this) {
     AlertType.PACE_TOO_FAST -> "Ease-up alert (pace)"
     AlertType.TARGET_REACHED -> "Target-reached alert"
     AlertType.HALFWAY -> "Halfway-there alert"
+}
+
+/**
+ * "Track with phone": start a cardio session on the phone's own GPS instead of the watch (no heart
+ * rate, everything else works). Hidden while the watch is running its own session; while the phone
+ * is tracking it turns into a Stop button.
+ */
+@Composable
+private fun PhoneTrackingControls(liveRun: LiveRunState.Snapshot) {
+    val context = LocalContext.current
+    var picking by remember { mutableStateOf(false) }
+    var pendingType by remember { mutableStateOf<ActivityType?>(null) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val type = pendingType
+        pendingType = null
+        // Location is required; the notification permission (Android 13+) only affects whether the
+        // ongoing "tracking" notice is shown.
+        if (type != null && results[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+            PhoneTrackingService.start(context, type)
+        }
+    }
+
+    fun begin(type: ActivityType) {
+        val needed = buildList {
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        val locationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (locationGranted) {
+            PhoneTrackingService.start(context, type)
+        } else {
+            pendingType = type
+            permissionLauncher.launch(needed.toTypedArray())
+        }
+    }
+
+    if (liveRun.isActive && liveRun.phoneSession) {
+        OutlinedButton(
+            onClick = { PhoneTrackingService.stop(context) },
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Stop phone tracking", color = MaterialTheme.colorScheme.error) }
+    } else if (!liveRun.isActive) {
+        OutlinedButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Track with phone (no watch)")
+        }
+    }
+
+    if (picking) {
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Track with phone") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Uses your phone's GPS instead of the watch: pace, distance and alerts work, heart rate doesn't.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    listOf(ActivityType.RUN, ActivityType.WALK, ActivityType.BIKE).forEach { type ->
+                        OutlinedButton(
+                            onClick = { picking = false; begin(type) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(type.displayName()) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Cancel") } }
+        )
+    }
 }
 
 /** "Heart rate, pace and target settings for: [Running v]" -- which activity the sections below edit. */
@@ -830,7 +911,7 @@ private fun DashboardStatsRow(thisMonth: String, lastWorkout: String) {
 @Composable
 private fun LiveRunStatsRow(state: LiveRunState.Snapshot, settings: TrainingSettings) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        StatItem("BPM", state.currentBpm?.toString() ?: "--")
+        if (!state.phoneSession) StatItem("BPM", state.currentBpm?.toString() ?: "--")
         if (state.activityType.usesGps) {
             if (state.activityType.showsSpeed) {
                 StatItem("Speed", state.currentPaceSecPerKm?.let { formatSpeed(it, settings.paceUnit) } ?: "--")
