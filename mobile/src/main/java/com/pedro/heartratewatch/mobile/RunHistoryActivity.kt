@@ -273,6 +273,8 @@ private fun RunRow(
                 Button(onClick = onDiscard) { Text("Discard") }
             }
             Text(run.activityType.displayName(), style = MaterialTheme.typography.labelLarge)
+            // The route, for sessions that recorded one (outdoor, from the watch or the phone).
+            if (run.activityType.usesGps) RouteMap(run.startedAtMillis)
             Text("Duration: %d:%02d".format(run.durationSeconds / 60, run.durationSeconds % 60))
             if (run.stoppedSeconds > 0) {
                 Text("Time stopped: %d:%02d".format(run.stoppedSeconds / 60, run.stoppedSeconds % 60))
