@@ -133,6 +133,29 @@ private fun AppSettingsScreen(
                     }
                 )
             }
+            if (reminder.enabled) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Reminder time")
+                    OutlinedButton(onClick = {
+                        TimePickerDialog(
+                            context,
+                            { _, hour, minute -> scope.launch { reminderRepository.save(reminder.copy(hour = hour, minute = minute)) } },
+                            reminder.hour,
+                            reminder.minute,
+                            DateFormat.is24HourFormat(context)
+                        ).show()
+                    }) {
+                        Text(
+                            java.time.LocalTime.of(reminder.hour, reminder.minute)
+                                .format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
+                        )
+                    }
+                }
+            }
             // Workout: the unit weights are shown and entered in.
             val weightUnit by workoutRepository.weightUnitFlow.collectAsStateWithLifecycle(initialValue = WeightUnit.LB)
             Row(
@@ -152,6 +175,12 @@ private fun AppSettingsScreen(
                     }
                 }
             }
+            var cardioOpen by remember { mutableStateOf(false) }
+            AccordionSection(
+                "Cardio settings",
+                expanded = cardioOpen,
+                onToggle = { cardioOpen = !cardioOpen }
+            ) {
             // Cardio: the unit distances are shown in on the phone, ahead of the distance target's own unit.
             val displayRepo = remember { DisplayDistanceUnitRepository(context.applicationContext) }
             val displayOverride by displayRepo.overrideFlow.collectAsStateWithLifecycle(initialValue = null)
@@ -186,14 +215,6 @@ private fun AppSettingsScreen(
                     }
                 }
             }
-            var cardioOpen by remember { mutableStateOf(false) }
-            AccordionSection(
-                "Cardio settings",
-                expanded = cardioOpen,
-                onToggle = { cardioOpen = !cardioOpen }
-            ) {
-                CardioSettingsContent(cardioSettingsRepository, calibrationRepository)
-            }
             var soundsOpen by remember { mutableStateOf(false) }
             val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
             AccordionSection(
@@ -215,28 +236,7 @@ private fun AppSettingsScreen(
                     )
                 }
             }
-            if (reminder.enabled) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Reminder time")
-                    OutlinedButton(onClick = {
-                        TimePickerDialog(
-                            context,
-                            { _, hour, minute -> scope.launch { reminderRepository.save(reminder.copy(hour = hour, minute = minute)) } },
-                            reminder.hour,
-                            reminder.minute,
-                            DateFormat.is24HourFormat(context)
-                        ).show()
-                    }) {
-                        Text(
-                            java.time.LocalTime.of(reminder.hour, reminder.minute)
-                                .format(java.time.format.DateTimeFormatter.ofLocalizedTime(java.time.format.FormatStyle.SHORT))
-                        )
-                    }
-                }
+                CardioSettingsContent(cardioSettingsRepository, calibrationRepository)
             }
         }
     }
