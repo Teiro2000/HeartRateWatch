@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -110,6 +111,7 @@ private fun AppSettingsScreen(
                     onCheckedChange = { scope.launch { themePreferenceRepository.setUseLightTheme(it) } }
                 )
             }
+            HorizontalDivider()
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -133,6 +135,7 @@ private fun AppSettingsScreen(
                     }
                 )
             }
+            HorizontalDivider()
             if (reminder.enabled) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
@@ -155,6 +158,7 @@ private fun AppSettingsScreen(
                         )
                     }
                 }
+                HorizontalDivider()
             }
             // Workout: the unit weights are shown and entered in.
             val weightUnit by workoutRepository.weightUnitFlow.collectAsStateWithLifecycle(initialValue = WeightUnit.LB)
@@ -175,6 +179,7 @@ private fun AppSettingsScreen(
                     }
                 }
             }
+            HorizontalDivider()
             var cardioOpen by remember { mutableStateOf(false) }
             AccordionSection(
                 "Cardio settings",
