@@ -28,6 +28,9 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -129,6 +132,11 @@ private fun HomeScreen() {
     val standing = Progression.standing(rememberBreakdown(context).total)
     val streak = streakDays(allStarts)
     // Re-arm the daily reminder alarm whenever the app opens (it's cleared if the app was force-stopped).
+    // Sessions the watch finished while the phone was out of reach are picked up now.
+    LaunchedEffect(Unit) { SessionIngest.pullPending(context.applicationContext) }
+    val recordsRepository = remember { RecordsRepository(context.applicationContext) }
+    val pendingRecords by recordsRepository.pendingFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val bannerScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         StreakReminder.schedule(context.applicationContext, StreakReminderRepository(context.applicationContext).current())
     }
@@ -143,6 +151,19 @@ private fun HomeScreen() {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 StatItem("Streak", if (streak > 0) "$streak d" else "--")
                 StatItem("Last workout", last)
+            }
+            if (pendingRecords.isNotEmpty()) {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            if (pendingRecords.size == 1) "New personal best" else "${pendingRecords.size} new personal bests",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        pendingRecords.takeLast(5).forEach { Text(it.text, style = MaterialTheme.typography.bodySmall) }
+                        TextButton(onClick = { bannerScope.launch { recordsRepository.markSeen() } }) { Text("Nice") }
+                    }
+                }
             }
             RankSummary(standing) { context.startActivity(Intent(context, RankActivity::class.java)) }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {

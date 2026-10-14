@@ -1,5 +1,7 @@
 package com.pedro.heartratewatch.mobile
 
+import com.google.android.gms.wearable.DataEvent
+import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import com.pedro.heartratewatch.shared.AlertType
@@ -18,6 +20,17 @@ import java.nio.ByteBuffer
  */
 class WearMessageListenerService : WearableListenerService() {
 
+    /** A finished session sent by the watch as a Data Layer item: save it, then clear it from the Data Layer. */
+    override fun onDataChanged(dataEvents: DataEventBuffer) {
+        val items = dataEvents.filter { it.type == DataEvent.TYPE_CHANGED }
+            .filter { it.dataItem.uri.path?.startsWith(DataLayerPaths.RUN_SUMMARY + "/") == true }
+            .map { it.freeze() }
+        if (items.isEmpty()) return
+        CoroutineScope(Dispatchers.IO).launch {
+            SessionIngest.pullPending(applicationContext)
+        }
+    }
+
     override fun onMessageReceived(messageEvent: MessageEvent) {
         if (messageEvent.path == DataLayerPaths.ALERT_STOP) {
             AlertPlayer(applicationContext).stop()
@@ -34,10 +47,12 @@ class WearMessageListenerService : WearableListenerService() {
             return
         }
 
+        // Older watch builds sent the finished session as a message; current ones send a Data Layer
+        // item instead (see onDataChanged), which also survives the watch being out of range.
         if (messageEvent.path == DataLayerPaths.RUN_SUMMARY) {
             val summary = RunSummary.fromBytes(messageEvent.data)
             CoroutineScope(Dispatchers.IO).launch {
-                RunHistoryRepository(applicationContext).addRun(summary)
+                SessionIngest.ingest(applicationContext, summary, route = null)
             }
             return
         }

@@ -51,13 +51,19 @@ class RunHistoryRepository(private val context: Context) {
     private fun starred(run: RunSummary, targets: Map<ActivityType, Float?>): Boolean =
         run.reachedTarget || targets[run.activityType]?.let { run.distanceMeters >= it } == true
 
-    suspend fun addRun(summary: RunSummary) {
+    /** Adds a session; returns false (and changes nothing) if one with the same start time is already saved. */
+    suspend fun addRun(summary: RunSummary): Boolean {
         val targets = currentTargets()
+        var added = false
         context.runHistoryDataStore.edit { prefs ->
-            val updated = parse(prefs[Keys.HISTORY]) + summary.copy(reachedTarget = starred(summary, targets))
-            prefs[Keys.HISTORY] = serialize(updated)
+            val existing = parse(prefs[Keys.HISTORY])
+            if (existing.none { it.startedAtMillis == summary.startedAtMillis }) {
+                prefs[Keys.HISTORY] = serialize(existing + summary.copy(reachedTarget = starred(summary, targets)))
+                added = true
+            }
         }
-        pushDashboardStatsToWatch()
+        if (added) pushDashboardStatsToWatch()
+        return added
     }
 
     /** Identifies a run by its start time, which is unique per run. */
@@ -66,11 +72,13 @@ class RunHistoryRepository(private val context: Context) {
             val updated = parse(prefs[Keys.HISTORY]).filterNot { it.startedAtMillis == startedAtMillis }
             prefs[Keys.HISTORY] = serialize(updated)
         }
+        RouteStore(context).delete(startedAtMillis)
         pushDashboardStatsToWatch()
     }
 
     suspend fun removeAllRuns() {
         context.runHistoryDataStore.edit { prefs -> prefs[Keys.HISTORY] = serialize(emptyList()) }
+        RouteStore(context).deleteAll()
         pushDashboardStatsToWatch()
     }
 

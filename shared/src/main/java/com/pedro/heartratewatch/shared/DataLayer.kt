@@ -48,7 +48,7 @@ object DataLayerPaths {
      * browsable on the phone. Not sent for calibration test sessions. Payload is
      * RunSummary.toBytes()/fromBytes().
      */
-    const val RUN_SUMMARY = "/run/summary"
+    const val RUN_SUMMARY = "/run/summary"  // as a Data Layer item: "/run/summary/<start time>", holding the summary and the route
 
     /** Sent phone -> watch to remotely kick off the guided max-HR calibration test (see
      * CalibrationActivity on :wear) -- the sensor work has to happen on the watch either way,

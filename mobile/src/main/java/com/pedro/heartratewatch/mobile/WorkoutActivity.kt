@@ -153,6 +153,27 @@ private fun WorkoutApp(repository: WorkoutRepository) {
         repository.saveActive(active)
     }
 
+    // Personal bests the workout just finished set; shown once in a dialog.
+    var newBests by remember { mutableStateOf<List<String>>(emptyList()) }
+    if (newBests.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { newBests = emptyList() },
+            title = { Text("New personal best!") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    newBests.forEach { Text(it) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    newBests = emptyList()
+                    // Seen here, so the main menu banner doesn't show them again.
+                    scope.launch { RecordsRepository(context.applicationContext).markSeen() }
+                }) { Text("Nice") }
+            }
+        )
+    }
+
     var screen by remember { mutableStateOf<Screen>(Screen.Menu) }
     BackHandler(enabled = screen != Screen.Menu) { screen = parentOf(screen) }
 
@@ -317,6 +338,13 @@ private fun WorkoutApp(repository: WorkoutRepository) {
                             onFinish = {
                                 scope.launch {
                                     repository.finish(workout)
+                                    // The new workout isn't in `history` yet; check it against everything before it.
+                                    val bests = workoutRecords(history + workout, workout, unit)
+                                    if (bests.isNotEmpty()) {
+                                        RecordsRepository(context.applicationContext)
+                                            .add(bests.map { RecordEvent(System.currentTimeMillis(), it) })
+                                        newBests = bests
+                                    }
                                     active = null
                                     screen = Screen.Menu
                                 }
