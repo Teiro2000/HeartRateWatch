@@ -46,7 +46,7 @@ private val SageCard = Color(0xFFE9E3D4)
 private val SageInk = Color(0xFF2F3A2F)
 private val SageMuted = Color(0xFF6B6F63)
 private val SageOutline = Color(0xFFA9A28F)
-private val SageLine = Color(0xFFDDD6C6)
+private val SageLine = Color(0xFFB3AB95)
 private val SageRed = Color(0xFFC62828)
 private val TerminalLine = Color(0xFF1E6B3E)
 
