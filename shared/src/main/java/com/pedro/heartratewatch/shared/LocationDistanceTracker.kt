@@ -28,6 +28,8 @@ import kotlin.math.max
 class LocationDistanceTracker(
     context: Context,
     private val maxSpeedMetersPerSecond: Float = MAX_FOOT_SPEED_METERS_PER_SECOND,
+    /** Called with each position that was accepted as real movement (and the very first fix): the points of the route. */
+    private val onPoint: ((latitude: Double, longitude: Double) -> Unit)? = null,
     private val onDistance: (Float) -> Unit
 ) {
     private val client = LocationServices.getFusedLocationProviderClient(context)
@@ -65,6 +67,7 @@ class LocationDistanceTracker(
         val from = anchor
         if (from == null) {
             anchor = fix
+            onPoint?.invoke(fix.latitude, fix.longitude)
             onDistance(totalMeters)
             return
         }
@@ -92,6 +95,7 @@ class LocationDistanceTracker(
         if (counted) {
             totalMeters += delta
             anchor = fix
+            onPoint?.invoke(fix.latitude, fix.longitude)
         }
         onDistance(totalMeters)
     }

@@ -18,6 +18,8 @@ import com.google.android.gms.wearable.Wearable
 import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.DataLayerPaths
 import com.pedro.heartratewatch.shared.LocationDistanceTracker
+import com.pedro.heartratewatch.shared.RoutePoint
+import com.pedro.heartratewatch.shared.RouteCodec
 import com.pedro.heartratewatch.shared.RunSummary
 import com.pedro.heartratewatch.shared.TrainingSettings
 import com.pedro.heartratewatch.wear.tile.HeartRateTileService
@@ -97,6 +99,9 @@ class ExerciseSessionService : LifecycleService() {
     // used at the end to find real best-split times -- see bestSplitSeconds. A run's worth of
     // samples at roughly one per second is a few tens of KB at most, trivial to hold in memory.
     private val allDistanceSamples = mutableListOf<Pair<Long, Float>>()
+
+    // GPS positions along the way (see LocationDistanceTracker.onPoint), sent with the summary so the phone can draw the route.
+    private val routePoints = mutableListOf<RoutePoint>()
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var heartRateSource: HeartRateSensorSource? = null
@@ -230,13 +235,16 @@ class ExerciseSessionService : LifecycleService() {
             activityType = activityType,
             stoppedSeconds = if (trackStops) stoppedSeconds else 0
         )
-        val nodes = runCatching {
-            Wearable.getNodeClient(this@ExerciseSessionService).connectedNodes.await()
-        }.getOrNull().orEmpty()
-
-        nodes.forEach { node ->
-            runCatching { messageClient.sendMessage(node.id, DataLayerPaths.RUN_SUMMARY, summary.toBytes()).await() }
-        }
+        // A Data Layer item rather than a message: the phone gets it whenever the two next connect, so a
+        // session finished while out of range still arrives later (a message would just be lost). The
+        // path ends in the start time, so each session is its own item.
+        val request = PutDataMapRequest.create("${DataLayerPaths.RUN_SUMMARY}/${summary.startedAtMillis}").apply {
+            dataMap.putByteArray("summary", summary.toBytes())
+            if (routePoints.size >= 2) {
+                dataMap.putByteArray("route", RouteCodec.encode(RouteCodec.downsample(routePoints)))
+            }
+        }.asPutDataRequest().setUrgent()
+        runCatching { Wearable.getDataClient(applicationContext).putDataItem(request).await() }
     }
 
     private fun startExercise() {
@@ -251,7 +259,8 @@ class ExerciseSessionService : LifecycleService() {
                 locationTracker = LocationDistanceTracker(
                     this,
                     maxSpeedMetersPerSecond = if (trackStops) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
-                    else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND
+                    else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND,
+                    onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon) }
                 ) { meters -> onSample(null, meters) }.also { it.start() }
             }
         } catch (e: SecurityException) {

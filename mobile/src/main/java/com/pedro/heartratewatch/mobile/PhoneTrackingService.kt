@@ -16,6 +16,8 @@ import androidx.core.content.ContextCompat
 import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.AlertType
 import com.pedro.heartratewatch.shared.LocationDistanceTracker
+import com.pedro.heartratewatch.shared.RouteCodec
+import com.pedro.heartratewatch.shared.RoutePoint
 import com.pedro.heartratewatch.shared.TrainingSettings
 import com.pedro.heartratewatch.shared.defaultSettingsFor
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +43,7 @@ class PhoneTrackingService : Service() {
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var historyRepository: RunHistoryRepository
 
+    private val routePoints = mutableListOf<RoutePoint>()
     private var tracker: PhoneSessionTracker? = null
     private var location: LocationDistanceTracker? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -106,7 +109,8 @@ class PhoneTrackingService : Service() {
             location = LocationDistanceTracker(
                 applicationContext,
                 maxSpeedMetersPerSecond = if (type == ActivityType.BIKE) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
-                else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND
+                else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND,
+                onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon) }
             ) { meters -> onDistance(session, meters) }.also { it.start() }
         } catch (e: SecurityException) {
             // Location permission missing: nothing to track.
@@ -186,7 +190,8 @@ class PhoneTrackingService : Service() {
             val summary = session.summary(System.currentTimeMillis())
             // A start-and-immediately-stop isn't worth a history entry.
             if (summary.distanceMeters > 0f || summary.durationSeconds >= MIN_SAVED_SECONDS) {
-                CoroutineScope(Dispatchers.IO).launch { historyRepository.addRun(summary) }
+                val route = if (routePoints.size >= 2) RouteCodec.encode(RouteCodec.downsample(routePoints)) else null
+                CoroutineScope(Dispatchers.IO).launch { SessionIngest.ingest(applicationContext, summary, route) }
             }
         }
         LiveRunState.clearPhoneSession()

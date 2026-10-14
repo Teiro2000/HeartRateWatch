@@ -44,7 +44,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 /** One workout's result for the chosen exercise. Weights are in lb, like everything stored. */
-private data class ProgressPoint(
+internal data class ProgressPoint(
     val millis: Long,
     val templateName: String,
     val sets: List<LoggedSet>,
@@ -58,9 +58,26 @@ private data class ProgressPoint(
 )
 
 /** Epley's estimate of the heaviest single rep you could do from a set of [reps] at [weight]. */
-private fun epley(weight: Double, reps: Int): Double = if (reps <= 1) weight else weight * (1 + reps / 30.0)
+internal fun epley(weight: Double, reps: Int): Double = if (reps <= 1) weight else weight * (1 + reps / 30.0)
 
-private fun buildPoints(history: List<WorkoutLog>, exerciseId: String): List<ProgressPoint> {
+/**
+ * What [workout] set records on, for each exercise in it: a new estimated 1RM and/or a heavier top
+ * weight than any earlier workout (the same rings the Progress chart shows). [history] must include
+ * [workout] itself.
+ */
+internal fun workoutRecords(history: List<WorkoutLog>, workout: WorkoutLog, unit: WeightUnit): List<String> {
+    val out = mutableListOf<String>()
+    workout.exercises.distinctBy { it.exerciseId }.forEach { log ->
+        val point = buildPoints(history, log.exerciseId).firstOrNull { it.millis == workout.startedAtMillis } ?: return@forEach
+        if (point.e1rmPr) out += "${log.exerciseName}: new est. 1RM ${formatWeight(unit.fromLb(point.e1rmLb))} ${unit.symbol}"
+        if (point.topWeightPr) {
+            out += "${log.exerciseName}: heaviest set ${formatWeight(unit.fromLb(point.topWeightLb))} ${unit.symbol} x ${point.topWeightReps}"
+        }
+    }
+    return out
+}
+
+internal fun buildPoints(history: List<WorkoutLog>, exerciseId: String): List<ProgressPoint> {
     var bestTop = Double.NEGATIVE_INFINITY
     var bestE1rm = Double.NEGATIVE_INFINITY
     return history.sortedBy { it.startedAtMillis }.mapNotNull { workout ->
