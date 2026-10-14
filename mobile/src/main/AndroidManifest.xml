@@ -30,6 +30,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".WeeklyRecapActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".RankActivity"
             android:exported="false" />
 
