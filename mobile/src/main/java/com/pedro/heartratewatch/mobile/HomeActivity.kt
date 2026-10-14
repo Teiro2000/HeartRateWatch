@@ -126,6 +126,7 @@ private fun HomeScreen() {
     val workouts by remember { WorkoutRepository(context.applicationContext).historyFlow }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val allStarts = runs.map { it.startedAtMillis } + workouts.map { it.startedAtMillis }
+    val standing = Progression.standing(rememberBreakdown(context).total)
     val streak = streakDays(allStarts)
     // Re-arm the daily reminder alarm whenever the app opens (it's cleared if the app was force-stopped).
     LaunchedEffect(Unit) {
@@ -143,6 +144,7 @@ private fun HomeScreen() {
                 StatItem("Streak", if (streak > 0) "$streak d" else "--")
                 StatItem("Last workout", last)
             }
+            RankSummary(standing) { context.startActivity(Intent(context, RankActivity::class.java)) }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 HomeTile("Cardio", Icons.AutoMirrored.Outlined.DirectionsRun, Modifier.weight(1f)) {
                     context.startActivity(Intent(context, MainActivity::class.java))
