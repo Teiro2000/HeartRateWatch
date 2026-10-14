@@ -191,7 +191,7 @@ private fun AppSettingsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Distance unit (cardio)")
+                    Text("Distance unit")
                     Text(
                         "How distances are shown in History and Stats. Overrides the unit chosen for the distance target.",
                         style = MaterialTheme.typography.bodySmall
@@ -218,7 +218,7 @@ private fun AppSettingsScreen(
             var soundsOpen by remember { mutableStateOf(false) }
             val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
             AccordionSection(
-                "Custom sounds (cardio)",
+                "Custom sounds",
                 expanded = soundsOpen,
                 onToggle = { soundsOpen = !soundsOpen }
             ) {
