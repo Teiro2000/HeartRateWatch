@@ -3,12 +3,13 @@ package com.pedro.heartratewatch.mobile
 import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.RunSummary
 import java.time.Instant
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.util.Locale
 
-data class MonthTotal(val month: YearMonth, val meters: Map<ActivityType, Double>) {
-    /** Distance covered in this month by one kind of activity. */
+data class DayTotal(val day: LocalDate, val meters: Map<ActivityType, Double>) {
+    /** Distance covered on this day by one kind of activity. */
     fun of(type: ActivityType): Double = meters[type] ?: 0.0
 
     val runMeters: Double get() = of(ActivityType.RUN)
@@ -16,39 +17,37 @@ data class MonthTotal(val month: YearMonth, val meters: Map<ActivityType, Double
 }
 
 /**
- * Total distance per calendar month, split into running and stationary biking. Derived straight
- * from run history rather than stored separately, so there's a single source of truth: the chart,
- * its CSV export, and the run-history CSV can never disagree, and discarding a workout removes it
- * from its month too. Months with no workouts between the first and last are included as zeros so
- * the chart has no gaps. Oldest month first.
+ * Total distance per calendar day, split by activity. Derived straight from run history rather than
+ * stored separately, so there's a single source of truth: the chart, its CSV export, and the run-history
+ * CSV can never disagree, and discarding a workout removes it from its day too. Days with no workouts
+ * between the first and last are included as zeros so the chart has no gaps. Oldest day first.
  */
-fun monthlyTotals(runs: List<RunSummary>): List<MonthTotal> {
+fun dailyTotals(runs: List<RunSummary>, zone: ZoneId = ZoneId.systemDefault()): List<DayTotal> {
     if (runs.isEmpty()) return emptyList()
-    val zone = ZoneId.systemDefault()
-    val byMonth = runs.groupBy { YearMonth.from(Instant.ofEpochMilli(it.startedAtMillis).atZone(zone)) }
-    val months = byMonth.keys.sorted()
+    val byDay = runs.groupBy { Instant.ofEpochMilli(it.startedAtMillis).atZone(zone).toLocalDate() }
+    val days = byDay.keys.sorted()
 
-    val totals = mutableListOf<MonthTotal>()
-    var month = months.first()
-    while (month <= months.last()) {
-        val inMonth = byMonth[month].orEmpty()
-        totals += MonthTotal(
-            month = month,
+    val totals = mutableListOf<DayTotal>()
+    var day = days.first()
+    while (!day.isAfter(days.last())) {
+        val onDay = byDay[day].orEmpty()
+        totals += DayTotal(
+            day = day,
             meters = ActivityType.entries.associateWith { type ->
-                inMonth.filter { it.activityType == type }.sumOf { it.distanceMeters.toDouble() }
+                onDay.filter { it.activityType == type }.sumOf { it.distanceMeters.toDouble() }
             }
         )
-        month = month.plusMonths(1)
+        day = day.plusDays(1)
     }
     return totals
 }
 
 /** Always kilometers, for spreadsheets/records regardless of the on-screen unit. */
-fun monthlyTotalsCsv(totals: List<MonthTotal>): String =
-    "month,run_km,walk_km,bike_km,stationary_bike_km,total_km\n" + totals.joinToString("\n") {
+fun dailyTotalsCsv(totals: List<DayTotal>): String =
+    "day,run_km,walk_km,bike_km,stationary_bike_km,total_km\n" + totals.joinToString("\n") {
         String.format(
             Locale.US, "%s,%.2f,%.2f,%.2f,%.2f,%.2f",
-            it.month, it.of(ActivityType.RUN) / 1000, it.of(ActivityType.WALK) / 1000,
+            it.day, it.of(ActivityType.RUN) / 1000, it.of(ActivityType.WALK) / 1000,
             it.of(ActivityType.BIKE) / 1000, it.of(ActivityType.STATIONARY_BIKE) / 1000, it.totalMeters / 1000
         )
     }

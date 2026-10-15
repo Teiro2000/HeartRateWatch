@@ -13,10 +13,10 @@ class LevelDecayTest {
     private fun day(d: String) = LocalDate.parse(d)
     private fun at(d: String) = day(d).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
 
-    /** A 20 km run: 1200 + 60 = 1260 XP, plus the day's streak bonus. */
+    /** An 8 km run in an hour: 480 + 60 = 540 XP, enough to keep the streak but short of the 600 that banks a rest day. */
     private fun bigRun(d: String) = RunSummary(
         startedAtMillis = at(d), durationSeconds = 3600, avgBpm = 150, maxBpm = 170, minBpm = 120,
-        distanceMeters = 20_000f, activityType = ActivityType.RUN
+        distanceMeters = 8_000f, activityType = ActivityType.RUN
     )
 
     @Test
@@ -54,7 +54,7 @@ class LevelDecayTest {
     fun theLevelNeverGoesBelowTheStart() {
         val runs = listOf(bigRun("2026-10-01"))
         val result = Progression.breakdown(runs, emptyList(), penaltiesFrom = day("2026-10-01"), today = day("2026-12-01"), zone = zone)
-        assertEquals(0, Progression.levelForXp(result.total))
+        assertEquals(1, Progression.levelForXp(result.total))
         assertTrue(result.total >= 0)
     }
 
@@ -65,6 +65,6 @@ class LevelDecayTest {
         assertEquals(Progression.cardioXp(runs[1]), result.cardio)
         val fresh = Progression.breakdown(runs, emptyList(), sinceMillis = at("2026-10-20"), penaltiesFrom = day("2026-10-20"), today = day("2026-10-25"), zone = zone)
         assertEquals(0, fresh.total)
-        assertEquals(0, Progression.levelForXp(fresh.total))
+        assertEquals(1, Progression.levelForXp(fresh.total))
     }
 }

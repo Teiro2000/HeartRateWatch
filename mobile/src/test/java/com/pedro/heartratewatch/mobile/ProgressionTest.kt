@@ -48,15 +48,14 @@ class ProgressionTest {
 
     @Test
     fun levelsAndRanksFollowTheCurve() {
-        assertEquals(0, Progression.levelForXp(0))
-        assertEquals(0, Progression.xpForLevel(0))
-        assertEquals(0, Progression.levelForXp(Progression.xpForLevel(1) - 1))
-        for (level in listOf(1, 2, 5, 10, 25, 50, 100)) {
+        assertEquals(1, Progression.levelForXp(0))
+        assertEquals(0, Progression.xpForLevel(1))
+        for (level in listOf(2, 5, 10, 25, 50, 100)) {
             val needed = Progression.xpForLevel(level)
             assertEquals(level, Progression.levelForXp(needed))
             assertEquals(level - 1, Progression.levelForXp(needed - 1))
         }
-        assertTrue(Progression.xpForLevel(10) in 9_000..10_500)
+        assertTrue(Progression.xpForLevel(10) in 7_000..9_000)
         assertEquals("Rookie", Progression.rankForLevel(4).name)
         assertEquals("Bronze", Progression.rankForLevel(5).name)
         assertEquals("Gold", Progression.rankForLevel(29).name)

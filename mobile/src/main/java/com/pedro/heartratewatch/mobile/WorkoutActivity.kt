@@ -1142,7 +1142,7 @@ private fun HistoryScreen(
                         Text(workoutHeading(workout, numbers.getValue(workout.id)), style = MaterialTheme.typography.titleMedium)
                         Text(formatDateTime(workout.startedAtMillis), style = MaterialTheme.typography.bodySmall)
                         Text(
-                            "${workout.exercises.size} exercises, ${workout.exercises.sumOf { it.sets.size }} sets",
+                            "${workout.exercises.size} exercises, ${workout.exercises.sumOf { it.sets.size }} sets  |  ${Progression.workoutXp(workout)} XP",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -1176,6 +1176,8 @@ private fun HistoryDetailScreen(workout: WorkoutLog, number: Int, unit: WeightUn
             Column {
                 ScreenTitle(workoutHeading(workout, number))
                 Text(formatDateTime(workout.startedAtMillis), style = MaterialTheme.typography.bodySmall)
+                // The session is worth 100 XP on its own; each exercise below adds its own.
+                Text("${Progression.workoutXp(workout)} XP in total (100 for the session)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 if (workout.note.isNotBlank()) {
                     Text("Notes: ${workout.note}", style = MaterialTheme.typography.bodySmall)
                 }
@@ -1199,6 +1201,7 @@ private fun HistoryDetailScreen(workout: WorkoutLog, number: Int, unit: WeightUn
                             Box(modifier = Modifier.size(14.dp).background(intensity.color(), CircleShape))
                             Text(intensity.label, style = MaterialTheme.typography.labelSmall)
                         }
+                        Text("+${Progression.exerciseXp(log)} XP", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
                     log.sets.forEachIndexed { index, set ->
                         Text("${index + 1}.  ${formatSet(set, unit)}")

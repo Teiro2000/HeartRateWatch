@@ -47,7 +47,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 
-private val MONTH_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM yy")
+private val DAY_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy")
+private val DAY_AXIS_FORMAT = DateTimeFormatter.ofPattern("MMM d")
 
 /** What the chart shows. More kinds of cardio will be added here as the app learns them. */
 private enum class CardioKind(val label: String, val type: ActivityType?) {
@@ -59,11 +60,11 @@ private enum class CardioKind(val label: String, val type: ActivityType?) {
 }
 
 /**
- * Line chart of total distance per month for one kind of cardio (running, stationary biking, or all of it) --
+ * Line chart of total distance per day for one kind of cardio (running, stationary biking, or all of it) --
  * in the same style as the workout Progress chart (see [LineChart]): pick the activity from a dropdown,
- * pick a range, tap a month for its numbers, and a ring marks every month that set a new record.
- * Built from run history (see [monthlyTotals]), so it grows automatically as workouts come in; the
- * export button writes the monthly totals as a spreadsheet-friendly CSV (always in km).
+ * pick a range, tap a day for its numbers, and a ring marks every day that set a new record.
+ * Built from run history (see [dailyTotals]), so it grows automatically as workouts come in; the
+ * export button writes the daily totals as a spreadsheet-friendly CSV (always in km).
  */
 class MonthlyChartActivity : ComponentActivity() {
 
@@ -91,7 +92,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
     val displayOverride by remember { DisplayDistanceUnitRepository(context.applicationContext).overrideFlow }
         .collectAsStateWithLifecycle(initialValue = null)
     val unit = displayOverride ?: paceUnit
-    val totals = remember(runs) { monthlyTotals(runs) }
+    val totals = remember(runs) { dailyTotals(runs) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     var kind by remember { mutableStateOf(CardioKind.RUN) }
@@ -106,10 +107,10 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
         scope.launch {
             val result = runCatching {
                 context.contentResolver.openOutputStream(uri)
-                    ?.use { it.write(monthlyTotalsCsv(totals).toByteArray()) }
+                    ?.use { it.write(dailyTotalsCsv(totals).toByteArray()) }
                     ?: error("Could not open the chosen file for writing")
             }
-            snackbarHostState.showSnackbar(if (result.isSuccess) "Exported monthly totals" else "Export failed")
+            snackbarHostState.showSnackbar(if (result.isSuccess) "Exported daily totals" else "Export failed")
         }
     }
 
@@ -123,7 +124,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             NavButtons(onBack = rememberSystemBack(), onMainMenu = { goToMainMenu(context) })
-            Text("Monthly Distance", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text("Daily Distance", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
 
             if (totals.isEmpty()) {
                 Text("No workouts recorded yet.")
@@ -133,7 +134,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             fun display(meters: Double) = meters / unit.metersPerUnit
 
             val visible = range?.let { (from, to) ->
-                totals.filter { it.month >= java.time.YearMonth.from(from) && it.month <= java.time.YearMonth.from(to) }
+                totals.filter { !it.day.isBefore(from) && !it.day.isAfter(to) }
             } ?: totals
 
             Box {
@@ -151,9 +152,9 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             }
             DateRangeChips(range) { range = it; selected = null }
 
-            // A ring marks each month that beat every earlier month for that line (the first
-            // month is only a baseline), judged against all-time history even when a range hides
-            // the earlier months.
+            // A ring marks each day that beat every earlier day for that line (the first
+            // day is only a baseline), judged against all-time history even when a range hides
+            // the earlier days.
             fun records(values: List<Double>): List<Boolean> {
                 var best = Double.NEGATIVE_INFINITY
                 val flags = values.map { v ->
@@ -164,7 +165,7 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
                 return flags
             }
             val offset = visible.firstOrNull()?.let { totals.indexOf(it) } ?: 0
-            fun series(color: Color, pick: (MonthTotal) -> Double): LineSeries {
+            fun series(color: Color, pick: (DayTotal) -> Double): LineSeries {
                 val all = totals.map { display(pick(it)) }
                 return LineSeries(color, all.drop(offset).take(visible.size), records(all).drop(offset).take(visible.size))
             }
@@ -176,37 +177,38 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
             )
             if (visible.isEmpty()) Text("No workouts in that range.") else {
             LineChart(
-                xMillis = visible.map { it.month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli() },
+                xMillis = visible.map { it.day.atStartOfDay(zone).toInstant().toEpochMilli() },
                 series = lines,
                 selected = selected?.takeIf { it in visible.indices },
                 onSelect = { selected = it },
-                xLabel = { MONTH_LABEL_FORMAT.format(java.time.Instant.ofEpochMilli(it).atZone(zone)) },
+                xLabel = { DAY_AXIS_FORMAT.format(java.time.Instant.ofEpochMilli(it).atZone(zone)) },
                 yLabel = { String.format(Locale.US, "%.1f", it) }
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 LegendDot(MaterialTheme.colorScheme.primary, kind.label)
-                Text("Ring = record month", style = MaterialTheme.typography.labelSmall)
+                Text("Ring = record day", style = MaterialTheme.typography.labelSmall)
             }
 
-            selected?.let { visible.getOrNull(it) }?.let { month ->
+            selected?.let { visible.getOrNull(it) }?.let { dayTotal ->
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(month.month.format(MONTH_LABEL_FORMAT), style = MaterialTheme.typography.titleSmall)
+                        Text(dayTotal.day.format(DAY_LABEL_FORMAT), style = MaterialTheme.typography.titleSmall)
                         ACTIVITY_ORDER.forEach { type ->
-                            Text("${type.displayName()}: %.1f %s".format(display(month.of(type)), unit.symbol), style = MaterialTheme.typography.bodySmall)
+                            Text("${type.displayName()}: %.1f %s".format(display(dayTotal.of(type)), unit.symbol), style = MaterialTheme.typography.bodySmall)
                         }
-                        Text("Total: %.1f %s".format(display(month.totalMeters), unit.symbol), style = MaterialTheme.typography.bodySmall)
+                        Text("Total: %.1f %s".format(display(dayTotal.totalMeters), unit.symbol), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
             }
 
             Text("Totals", style = MaterialTheme.typography.titleMedium)
-            totals.asReversed().forEach {
+            // Only the days something was done, newest first.
+            totals.asReversed().filter { it.totalMeters > 0 }.forEach {
                 Text(
                     "%s: run %.1f, walk %.1f, bike %.1f, stationary %.1f, total %.1f %s".format(
-                        it.month, display(it.of(ActivityType.RUN)), display(it.of(ActivityType.WALK)),
+                        it.day, display(it.of(ActivityType.RUN)), display(it.of(ActivityType.WALK)),
                         display(it.of(ActivityType.BIKE)), display(it.of(ActivityType.STATIONARY_BIKE)),
                         display(it.totalMeters), unit.symbol
                     )
@@ -226,9 +228,9 @@ private fun MonthlyChartScreen(repository: RunHistoryRepository, unitPreferences
 
             Spacer(Modifier.height(4.dp))
             Button(
-                onClick = { exportLauncher.launch("pulseguard_monthly_totals.csv") },
+                onClick = { exportLauncher.launch("pulseguard_daily_totals.csv") },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("Export monthly totals (CSV)") }
+            ) { Text("Export daily totals (CSV)") }
         }
     }
 }

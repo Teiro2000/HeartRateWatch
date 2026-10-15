@@ -133,7 +133,7 @@ private fun HomeScreen() {
     LevelUpHost()
     val breakdown = rememberBreakdown(context)
     val standing = Progression.standing(breakdown.total)
-    // The streak counts only sessions that were a real effort (see Effort), with rest days carrying it over.
+    // A day counts for the streak at 300 XP (cardio and workouts together), with rest days carrying it over.
     val streak = breakdown.streakDays
     // Re-arm the daily reminder alarm whenever the app opens (it's cleared if the app was force-stopped).
     // Right after a restore from a backup, the restored settings and stats go to the watch.

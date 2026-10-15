@@ -125,10 +125,6 @@ private fun AppSettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Streak reminder")
-                    Text(
-                        "A notification at the time below if you haven't worked out or done cardio yet that day. Not sent once today's streak is done.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
                 }
                 Switch(
                     checked = reminder.enabled,
@@ -353,32 +349,6 @@ private fun AppSettingsScreen(
                     dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
                 )
             }
-            // Testing: trying the level-up moment without waiting to earn a level.
-            val levelBreakdown = rememberBreakdown(context)
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Test level up")
-                    Text("Adds a level so you can see the level-up moment. Clear removes the test levels.", style = MaterialTheme.typography.bodySmall)
-                }
-                // As wide as the widest button, so the text beside it keeps the rest of the row.
-                Column(modifier = Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            val level = Progression.levelForXp(levelBreakdown.total)
-                            ProgressionSettingsRepository(context.applicationContext)
-                                .addBonusXp(Progression.xpForLevel(level + 1) - levelBreakdown.total)
-                        }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("+1 level") }
-                    OutlinedButton(onClick = {
-                        scope.launch { ProgressionSettingsRepository(context.applicationContext).clearBonusXp() }
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Clear") }
-                }
-            }
-            HorizontalDivider()
         }
     }
 }
