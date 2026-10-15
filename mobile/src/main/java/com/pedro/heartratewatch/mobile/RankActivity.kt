@@ -21,6 +21,15 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -41,19 +50,109 @@ class RankActivity : ComponentActivity() {
     }
 }
 
-/** XP, level and rank worked out from both histories (see [Progression]); updates as they change. */
+/**
+ * XP, level and rank worked out from both histories (see [Progression]); null until everything has loaded,
+ * so nothing is decided from a half-loaded state (a level-up check would otherwise see level 1 for a moment).
+ */
 @Composable
-internal fun rememberBreakdown(context: Context): Progression.Breakdown {
-    val runs by remember { RunHistoryRepository(context.applicationContext).historyFlow }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val workouts by remember { WorkoutRepository(context.applicationContext).historyFlow }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val settings = remember { ProgressionSettingsRepository(context.applicationContext) }
-    val resetAt by settings.resetAtFlow.collectAsStateWithLifecycle(initialValue = 0L)
+internal fun rememberBreakdownOrNull(context: Context): Progression.Breakdown? {
+    val app = context.applicationContext
+    val runs by remember { RunHistoryRepository(app).historyFlow }.collectAsStateWithLifecycle(initialValue = null)
+    val workouts by remember { WorkoutRepository(app).historyFlow }.collectAsStateWithLifecycle(initialValue = null)
+    val settings = remember { ProgressionSettingsRepository(app) }
+    val resetAt by settings.resetAtFlow.collectAsStateWithLifecycle(initialValue = null)
     val penaltiesFrom by settings.penaltiesFromFlow.collectAsStateWithLifecycle(initialValue = null)
+    val bonus by settings.bonusXpFlow.collectAsStateWithLifecycle(initialValue = null)
     // From the first time levels are shown, a full day without a session costs a level.
     LaunchedEffect(Unit) { settings.ensurePenaltiesStarted() }
-    return remember(runs, workouts, resetAt, penaltiesFrom) { Progression.breakdown(runs, workouts, resetAt, penaltiesFrom) }
+    val loadedRuns = runs ?: return null
+    val loadedWorkouts = workouts ?: return null
+    val loadedResetAt = resetAt ?: return null
+    val loadedPenalties = penaltiesFrom ?: return null
+    val loadedBonus = bonus ?: return null
+    return remember(loadedRuns, loadedWorkouts, loadedResetAt, loadedPenalties, loadedBonus) {
+        Progression.breakdown(
+            loadedRuns, loadedWorkouts, loadedResetAt,
+            penaltiesFrom = loadedPenalties.takeIf { it != java.time.LocalDate.MAX },
+            bonusXp = loadedBonus
+        )
+    }
+}
+
+/** Like [rememberBreakdownOrNull], showing zero XP while loading. */
+@Composable
+internal fun rememberBreakdown(context: Context): Progression.Breakdown =
+    rememberBreakdownOrNull(context) ?: Progression.Breakdown(0, 0, 0)
+
+/**
+ * The "Level up!" / "Rank up!" moment. Place it on a screen and it shows a celebration the first time that
+ * screen sees a higher level than the last one celebrated. Going down a level (a missed day) is quietly
+ * remembered with no pop-up, and the very first look at levels just records where you are.
+ */
+@Composable
+internal fun LevelUpHost() {
+    val context = LocalContext.current
+    val breakdown = rememberBreakdownOrNull(context) ?: return
+    val level = Progression.levelForXp(breakdown.total)
+    val settings = remember { ProgressionSettingsRepository(context.applicationContext) }
+    val celebrated by settings.celebratedLevelFlow.collectAsStateWithLifecycle(initialValue = null)
+    val haptics = LocalHapticFeedback.current
+    var showing by remember { mutableStateOf<Pair<Progression.Standing, Boolean>?>(null) }
+
+    LaunchedEffect(level, celebrated) {
+        val last = celebrated ?: return@LaunchedEffect
+        when {
+            last == 0 || level < last -> settings.setCelebratedLevel(level)
+            level > last -> {
+                val rankUp = Progression.rankForLevel(level) != Progression.rankForLevel(last)
+                settings.setCelebratedLevel(level)
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                showing = Progression.standing(breakdown.total) to rankUp
+            }
+        }
+    }
+
+    showing?.let { (standing, rankUp) ->
+        val scale by animateFloatAsState(targetValue = 1f, animationSpec = spring(dampingRatio = 0.35f, stiffness = 200f), label = "pop")
+        AlertDialog(
+            onDismissRequest = { showing = null },
+            title = {
+                Text(
+                    if (rankUp) "Rank up!" else "Level up!",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = standing.rank.color,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "${standing.level}",
+                        style = MaterialTheme.typography.displayLarge,
+                        color = standing.rank.color,
+                        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale }
+                    )
+                    Text("Level ${standing.level}", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (rankUp) "You are now ${standing.rank.name}!" else standing.rank.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = standing.rank.color
+                    )
+                    standing.nextRank?.let {
+                        Text(
+                            "${it.minLevel - standing.level} more to ${it.name}",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showing = null }, modifier = Modifier.fillMaxWidth()) { Text("Nice") }
+            }
+        )
+    }
 }
 
 private fun Int.grouped(): String = NumberFormat.getIntegerInstance().format(this)
@@ -141,6 +240,7 @@ private fun RankScreen() {
             XpLine("Workouts", breakdown.workouts)
             XpLine("Streak bonus", breakdown.streak)
             if (breakdown.missedDays > 0) XpLine("Missed days (${breakdown.missedDays}, a level each)", -breakdown.lost)
+            if (breakdown.bonus != 0) XpLine("Test levels", breakdown.bonus)
             XpLine("Total", breakdown.total, bold = true)
             Text(
                 "Cardio: distance and moving time, with a bonus for each target star. Workouts: the session, each set and the weight lifted. " +

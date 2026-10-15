@@ -109,6 +109,9 @@ class SettingsRepository(private val context: Context) {
         prefs[Shared.DISTANCE_UNIT] = settings.distanceUnit.name
     }
 
+    /** Pushes the saved settings to the watch again (used after restoring a backup). */
+    suspend fun resyncToWatch() = pushToWatch()
+
     /** Pushes every activity's settings (and the shared ones) in a single Data Layer item. */
     private suspend fun pushToWatch() {
         val prefs = context.settingsDataStore.data.first()

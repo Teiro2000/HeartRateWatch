@@ -31,9 +31,11 @@ object Progression {
         /** Full days without a session since penalties began, each of which cost a level. */
         val missedDays: Int = 0,
         /** The XP those missed days took away. */
-        val lost: Int = 0
+        val lost: Int = 0,
+        /** XP added by the Settings test button. */
+        val bonus: Int = 0
     ) {
-        val total: Int get() = cardio + workouts + streak - lost
+        val total: Int get() = cardio + workouts + streak - lost + bonus
     }
 
     fun cardioXp(run: RunSummary): Int {
@@ -84,6 +86,7 @@ object Progression {
         workouts: List<WorkoutLog>,
         sinceMillis: Long = 0L,
         penaltiesFrom: java.time.LocalDate? = null,
+        bonusXp: Int = 0,
         today: java.time.LocalDate = java.time.LocalDate.now(),
         zone: ZoneId = ZoneId.systemDefault()
     ): Breakdown {
@@ -93,7 +96,7 @@ object Progression {
         val workoutTotal = countedWorkouts.sumOf { workoutXp(it) }
         val starts = counted.map { it.startedAtMillis } + countedWorkouts.map { it.startedAtMillis }
         val streak = streakXp(starts, zone)
-        if (penaltiesFrom == null || starts.isEmpty()) return Breakdown(cardio, workoutTotal, streak)
+        if (penaltiesFrom == null || starts.isEmpty()) return Breakdown(cardio, workoutTotal, streak, bonus = bonusXp)
 
         fun dayOf(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
         val sessionXp = HashMap<java.time.LocalDate, Int>()
@@ -124,7 +127,7 @@ object Progression {
             day = day.plusDays(1)
         }
         val gained = cardio + workoutTotal + streak
-        return Breakdown(cardio, workoutTotal, streak, missedDays = missedDays, lost = gained - xp)
+        return Breakdown(cardio, workoutTotal, streak, missedDays = missedDays, lost = gained - xp, bonus = bonusXp)
     }
 
     // ---------------------------------------------------------------- levels
