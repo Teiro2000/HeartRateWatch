@@ -133,7 +133,8 @@ private fun AppSettingsScreen(
                     }
                 )
             }
-            HorizontalDivider()
+            // With the reminder on, the time row sits directly under it and the line goes after both.
+            if (!reminder.enabled) HorizontalDivider()
             if (reminder.enabled) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
