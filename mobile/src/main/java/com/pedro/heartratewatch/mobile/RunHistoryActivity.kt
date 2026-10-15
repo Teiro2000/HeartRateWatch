@@ -272,7 +272,10 @@ private fun RunRow(
                 }
                 Button(onClick = onDiscard) { Text("Discard") }
             }
-            Text(run.activityType.displayName(), style = MaterialTheme.typography.labelLarge)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(run.activityType.displayName(), style = MaterialTheme.typography.labelLarge)
+                Text("${Progression.cardioXp(run)} XP", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
             // The route, for sessions that recorded one (outdoor, from the watch or the phone).
             if (run.activityType.usesGps) RouteMap(run.startedAtMillis)
             Text("Duration: %d:%02d".format(run.durationSeconds / 60, run.durationSeconds % 60))

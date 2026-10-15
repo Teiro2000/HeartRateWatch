@@ -20,7 +20,8 @@ import kotlin.math.roundToInt
  *    moving. A ruck walk's rate grows with the pack (+1% per lb). A star for hitting the distance
  *    target adds 50.
  *  - Workout: 100 for the session, 5 per set logged with reps, and 1 per 200 lb lifted.
- *  - Streak: each active day adds 5 x its day in the streak (capped at 10), so keeping a streak going is worth a little extra.
+ *  - Streak: a day (cardio and workouts together) with at least 300 XP counts for the streak and adds 5 x its day in
+ *    the streak (capped at 10). A day with 600 XP also banks a rest day. See [breakdown].
  */
 object Progression {
 
@@ -28,26 +29,24 @@ object Progression {
         val cardio: Int,
         val workouts: Int,
         val streak: Int,
-        /** Full days without a counting session since penalties began (and no rest day to cover them), each costing a level. */
+        /** Full days that didn't reach [STREAK_XP] since penalties began (and no rest day to cover them), each costing a level. */
         val missedDays: Int = 0,
         /** The XP those missed days took away. */
         val lost: Int = 0,
-        /** XP added by the Settings test button. */
-        val bonus: Int = 0,
-        /** The streak right now, in days that counted (or were covered by a rest day). */
+        /** The streak right now, in days that reached [STREAK_XP] (rest days carry it over). */
         val streakDays: Int = 0,
         /** Rest days used so far, each of which spared a missed day. */
         val restDaysUsed: Int = 0,
         /** Rest days banked and ready (at most [MAX_REST_CREDITS]). */
         val restCredits: Int = 0,
-        /** When the next rest day can be used, if one was used in the last week; null when one can be used now. */
+        /** When the week's rest days are available again (next Monday), if both have been used; null otherwise. */
         val nextRestOn: java.time.LocalDate? = null,
-        /** Whether today already has a session that counts. */
-        val todayCounts: Boolean = false,
-        /** Counting days in a row towards the next rest day (0 to 6; the bar is this out of [REST_EARNED_EVERY]). */
-        val restProgress: Int = 0
+        /** XP earned today, from cardio and workouts together: the bar towards [STREAK_XP] and [REST_XP]. */
+        val todayXp: Int = 0,
+        /** Whether today has reached [STREAK_XP], so the streak carries on. */
+        val todayCounts: Boolean = false
     ) {
-        val total: Int get() = cardio + workouts + streak - lost + bonus
+        val total: Int get() = cardio + workouts + streak - lost
     }
 
     fun cardioXp(run: RunSummary): Int {
@@ -60,6 +59,16 @@ object Progression {
         }
         val star = if (run.reachedTarget) 50.0 else 0.0
         return (km * perKm + movingMinutes + star).roundToInt()
+    }
+
+    /** What one exercise in a workout is worth: 5 per set with reps and 1 per 200 lb lifted (the session's own 100 is on top, see [workoutXp]). */
+    fun exerciseXp(log: ExerciseLog): Int {
+        val sets = log.sets.filter { (it.reps ?: 0) > 0 }
+        val volumeLb = sets.sumOf { set ->
+            val weight = set.weight ?: 0.0
+            if (weight > 0) weight * (set.reps ?: 0) else 0.0
+        }
+        return (5 * sets.size + volumeLb / 200.0).roundToInt()
     }
 
     fun workoutXp(workout: WorkoutLog): Int {
@@ -86,33 +95,26 @@ object Progression {
         return bonus
     }
 
-    private class Session(val startedAtMillis: Long, val xp: Int, val counts: Boolean, val kind: String) {
-        var big = false
-    }
+    /** Monday of the week [date] is in: every week, for rest days, runs Monday to Sunday. */
+    fun weekStart(date: java.time.LocalDate): java.time.LocalDate = date.with(java.time.DayOfWeek.MONDAY)
 
     /**
-     * Everything from [sinceMillis] on (a level reset moves this forward), replayed day by day.
-     *
-     * A session earns its XP always, but only one that meets the effort bar ([Effort], via [effort]) counts for
-     * the day: it extends the streak and earns the streak bonus. On a day without a counting session (a full
-     * day, from [penaltiesFrom] on) one of two things happens:
-     *  - a banked rest day covers it, if there is one and fewer than [MAX_USED_PER_WEEK] were used in the last
-     *    7 days: no level is lost and the streak carries on;
-     *  - otherwise a level is lost (exactly one, never below level 1) and the streak resets.
-     * Rest days are earned: one for every 7 counting days in a row, and one for a big session (counting,
-     * and worth at least [BIG_SESSION_FACTOR] times the median of the last [BIG_SESSION_WINDOW] sessions of its
-     * kind). At most [MAX_REST_CREDITS] are banked, at most [MAX_EARNED_PER_WEEK] can be earned in any 7 days,
-     * and at most [MAX_USED_PER_WEEK] used in any 7 days. A rest day covers whichever day is skipped, so you choose
-     * your rest days (the weekend, say) simply by not training. Today isn't judged until it is over. Nothing is
-     * penalised before [penaltiesFrom], so a gap in old history costs nothing.
+     * Everything from [sinceMillis] on (a level reset moves this forward), replayed day by day, with cardio and
+     * workouts mixed freely: a day's XP is all its sessions together.
+     *  - A day with at least [STREAK_XP] XP counts: it extends the streak and earns the streak bonus.
+     *  - A day with at least [REST_XP] XP also banks a rest day. That is the only way to bank one. At most
+     *    [MAX_REST_CREDITS] are held, and at most [MAX_EARNED_PER_WEEK] earned in a calendar week (on different days).
+     *  - A full day that doesn't count (from [penaltiesFrom] on) is covered by a banked rest day if one is
+     *    banked and fewer than [MAX_USED_PER_WEEK] were used that week; the streak carries on. Otherwise it costs exactly
+     *    one level (never below level 1) and the streak resets. You pick your rest days simply by skipping them.
+     * Weeks start on Monday. Today isn't judged until it is over. Nothing is penalised before [penaltiesFrom], so
+     * a gap in old history costs nothing.
      */
     fun breakdown(
         runs: List<RunSummary>,
         workouts: List<WorkoutLog>,
         sinceMillis: Long = 0L,
         penaltiesFrom: java.time.LocalDate? = null,
-        bonusXp: Int = 0,
-        effort: EffortContext = EffortContext(),
         today: java.time.LocalDate = java.time.LocalDate.now(),
         zone: ZoneId = ZoneId.systemDefault()
     ): Breakdown {
@@ -121,75 +123,50 @@ object Progression {
         val cardio = counted.sumOf { cardioXp(it) }
         val workoutTotal = countedWorkouts.sumOf { workoutXp(it) }
 
-        val sessions = (
-            counted.map { Session(it.startedAtMillis, cardioXp(it), Effort.cardioQualifies(it, effort), it.activityType.name) } +
-                countedWorkouts.map { Session(it.startedAtMillis, workoutXp(it), Effort.workoutQualifies(it, effort), "WORKOUT") }
-            ).sortedBy { it.startedAtMillis }
-
-        // A big session is one well above what is usual for that kind of session.
-        val earlier = HashMap<String, MutableList<Int>>()
-        for (session in sessions) {
-            val before = earlier.getOrPut(session.kind) { mutableListOf() }
-            if (session.counts && before.size >= BIG_SESSION_MIN_HISTORY) {
-                val recent = before.takeLast(BIG_SESSION_WINDOW).sorted()
-                val median = if (recent.size % 2 == 1) recent[recent.size / 2].toDouble()
-                else (recent[recent.size / 2 - 1] + recent[recent.size / 2]) / 2.0
-                session.big = session.xp >= BIG_SESSION_FACTOR * median
-            }
-            before += session.xp
-        }
-        if (sessions.isEmpty()) return Breakdown(cardio, workoutTotal, 0, bonus = bonusXp)
-
         fun dayOf(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
-        val byDay = sessions.groupBy { dayOf(it.startedAtMillis) }
+        val dayXp = HashMap<java.time.LocalDate, Int>()
+        counted.forEach { dayXp.merge(dayOf(it.startedAtMillis), cardioXp(it), Int::plus) }
+        countedWorkouts.forEach { dayXp.merge(dayOf(it.startedAtMillis), workoutXp(it), Int::plus) }
+        val todayXp = dayXp[today] ?: 0
+        if (dayXp.isEmpty()) return Breakdown(cardio, workoutTotal, 0, todayXp = todayXp)
 
         var xp = 0
         var streakBonusTotal = 0
         var missedDays = 0
         var restUsed = 0
         var credits = 0
-        var countingRun = 0   // consecutive counting days, towards the next rest day
-        var streakRun = 0     // the streak: counting days, with rest days carrying it over
+        var streakRun = 0
         val restOn = mutableListOf<java.time.LocalDate>()
         val earnedOn = mutableListOf<java.time.LocalDate>()
-        var day = byDay.keys.min()
-        fun earn(on: java.time.LocalDate) {
-            if (credits >= MAX_REST_CREDITS) return
-            if (earnedOn.count { it.isAfter(on.minusDays(7)) } >= MAX_EARNED_PER_WEEK) return
-            credits++
-            earnedOn += on
-        }
+        var day = dayXp.keys.min()
         while (!day.isAfter(today)) {
-            val list = byDay[day].orEmpty()
-            xp += list.sumOf { it.xp }
-            val counts = list.any { it.counts }
-            if (counts) {
+            val earned = dayXp[day] ?: 0
+            xp += earned
+            if (earned >= STREAK_XP) {
                 streakRun++
                 val bonus = 5 * min(streakRun, 10)
                 xp += bonus
                 streakBonusTotal += bonus
-                countingRun++
-                if (countingRun >= REST_EARNED_EVERY) {
-                    earn(day)
-                    countingRun = 0
+                if (earned >= REST_XP && credits < MAX_REST_CREDITS &&
+                    earnedOn.count { weekStart(it) == weekStart(day) } < MAX_EARNED_PER_WEEK
+                ) {
+                    credits++
+                    earnedOn += day
                 }
-                if (list.any { it.counts && it.big }) earn(day)
             } else if (day.isBefore(today)) {
                 val penalised = penaltiesFrom != null && !day.isBefore(penaltiesFrom)
-                val restReady = credits > 0 && restOn.count { it.isAfter(day.minusDays(7)) } < MAX_USED_PER_WEEK
+                val restReady = credits > 0 && restOn.count { weekStart(it) == weekStart(day) } < MAX_USED_PER_WEEK
                 if (penalised && restReady) {
                     credits--
                     restOn += day
                     restUsed++
-                    countingRun = 0
                 } else {
                     streakRun = 0
-                    countingRun = 0
                     if (penalised) {
                         missedDays++
                         // Exactly one level down, keeping the progress made within the level (as far as the lower level has room for).
                         val level = levelForXp(xp)
-                        if (level > 0) {
+                        if (level > 1) {
                             val into = xp - xpForLevel(level)
                             val room = xpForLevel(level) - xpForLevel(level - 1) - 1
                             xp = xpForLevel(level - 1) + min(into, room)
@@ -200,36 +177,36 @@ object Progression {
             day = day.plusDays(1)
         }
         val gained = cardio + workoutTotal + streakBonusTotal
-        // If the week's allowance is used up, the day the oldest of those rest days leaves the 7-day window.
-        val recentRest = restOn.filter { it.isAfter(today.minusDays(7)) }
-        val nextRest = if (recentRest.size >= MAX_USED_PER_WEEK) recentRest.min().plusDays(7) else null
+        val thisWeek = weekStart(today)
+        val nextRest = if (restOn.count { weekStart(it) == thisWeek } >= MAX_USED_PER_WEEK) thisWeek.plusWeeks(1) else null
         return Breakdown(
             cardio, workoutTotal, streakBonusTotal,
-            missedDays = missedDays, lost = gained - xp, bonus = bonusXp,
+            missedDays = missedDays, lost = gained - xp,
             streakDays = streakRun, restDaysUsed = restUsed, restCredits = credits, nextRestOn = nextRest,
-            todayCounts = byDay[today]?.any { it.counts } == true,
-            restProgress = countingRun
+            todayXp = todayXp, todayCounts = todayXp >= STREAK_XP
         )
     }
+
+    /** XP in a day (cardio and workouts together) that keeps the streak going. */
+    const val STREAK_XP = 300
+
+    /** XP in a day that banks a rest day (the only way to bank one). */
+    const val REST_XP = 600
 
     const val MAX_REST_CREDITS = 2
     const val MAX_EARNED_PER_WEEK = 2
     const val MAX_USED_PER_WEEK = 2
-    const val REST_EARNED_EVERY = 7
-    private const val BIG_SESSION_FACTOR = 2.0
-    private const val BIG_SESSION_WINDOW = 10
-    private const val BIG_SESSION_MIN_HISTORY = 3
 
     // ---------------------------------------------------------------- levels
 
-    /** Total XP needed to reach [level]. Everyone starts at level 0, with 0 XP. */
+    /** Total XP needed to reach [level] (level 1 is where everyone starts, at 0). */
     fun xpForLevel(level: Int): Int =
-        if (level <= 0) 0 else (LEVEL_SCALE * level.toDouble().pow(LEVEL_POWER)).roundToInt()
+        if (level <= 1) 0 else (LEVEL_SCALE * (level - 1).toDouble().pow(LEVEL_POWER)).roundToInt()
 
     fun levelForXp(xp: Int): Int {
-        var level = max(0, (xp / LEVEL_SCALE).pow(1.0 / LEVEL_POWER).toInt())
+        var level = max(1, (xp / LEVEL_SCALE).pow(1.0 / LEVEL_POWER).toInt())
         while (xpForLevel(level + 1) <= xp) level++
-        while (level > 0 && xpForLevel(level) > xp) level--
+        while (level > 1 && xpForLevel(level) > xp) level--
         return level
     }
 
@@ -264,7 +241,7 @@ object Progression {
 
     /** Lowest level first. Reaching [minLevel] earns the rank. */
     val RANKS = listOf(
-        Rank("Rookie", 0, Color(0xFF9E9E9E)),
+        Rank("Rookie", 1, Color(0xFF9E9E9E)),
         Rank("Bronze", 5, Color(0xFFCD7F32)),
         Rank("Silver", 10, Color(0xFFB0BEC5)),
         Rank("Gold", 20, Color(0xFFFFC107)),
@@ -277,7 +254,7 @@ object Progression {
 
     fun rankForLevel(level: Int): Rank = RANKS.last { it.minLevel <= level }
 
-    // Level n needs 123 x n^1.9 XP: level 10 is around 9,800 XP, level 25 around 56,000, level 50 around 230,000.
+    // Level n needs 123 x (n-1)^1.9 XP: level 10 is around 8,000 XP, level 25 around 50,000, level 50 around 200,000.
     private const val LEVEL_SCALE = 123.0
     private const val LEVEL_POWER = 1.9
 }

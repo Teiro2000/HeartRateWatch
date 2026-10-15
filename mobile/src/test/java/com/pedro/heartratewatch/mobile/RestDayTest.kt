@@ -9,100 +9,102 @@ import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
 
+/** The streak and rest day rules: a day is worth 300 XP for the streak and 600 XP for a banked rest day, cardio and workouts mixed. */
 class RestDayTest {
     private val zone = ZoneId.of("UTC")
     private fun day(d: String) = LocalDate.parse(d)
     private fun at(d: String) = day(d).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
 
-    /** A run that counts: 40 minutes at a heart rate above the default lower bound. */
-    private fun run(d: String, km: Float = 8f, bpm: Int = 150, minutes: Int = 40, target: Boolean = false) = RunSummary(
-        startedAtMillis = at(d), durationSeconds = minutes * 60, avgBpm = bpm, maxBpm = 175, minBpm = 120,
-        distanceMeters = km * 1000f, activityType = ActivityType.RUN, reachedTarget = target
+    /** A run worth exactly [xp] XP (1 minute plus 60 XP a km). */
+    private fun runWorth(d: String, xp: Int) = RunSummary(
+        startedAtMillis = at(d), durationSeconds = 60, avgBpm = 120, maxBpm = 140, minBpm = 100,
+        distanceMeters = (xp - 1) * 1000f / 60f, activityType = ActivityType.RUN
     )
 
-    private fun week(from: String, days: Int) = List(days) { run(day(from).plusDays(it.toLong()).toString()) }
+    /** A workout worth exactly [xp] XP (100 for the session plus 5 a set; [xp] must be 100 + a multiple of 5). */
+    private fun workoutWorth(d: String, xp: Int) = WorkoutLog(
+        id = "w$d$xp", startedAtMillis = at(d), templateName = "x",
+        exercises = listOf(ExerciseLog("e$d$xp", "ex", "Ex", List((xp - 100) / 5) { LoggedSet("$it", null, 1) }))
+    )
 
-    private fun breakdown(runs: List<RunSummary>, today: String, penaltiesFrom: String = "2026-01-01") =
-        Progression.breakdown(runs, emptyList(), penaltiesFrom = day(penaltiesFrom), today = day(today), zone = zone)
+    private fun breakdown(runs: List<RunSummary> = emptyList(), workouts: List<WorkoutLog> = emptyList(), today: String, penaltiesFrom: String = "2026-01-01") =
+        Progression.breakdown(runs, workouts, penaltiesFrom = day(penaltiesFrom), today = day(today), zone = zone)
+
+    // 2026-10-05 is a Monday, so the 5th to the 11th is one week and the 12th starts the next.
 
     @Test
-    fun aSessionBelowTheEffortBarEarnsXpButDoesNotCount() {
-        val lazy = run("2026-10-01", km = 1f, bpm = 80, minutes = 15)
-        assertFalse(Effort.cardioQualifies(lazy, EffortContext()))
-        assertTrue(Effort.cardioQualifies(run("2026-10-01"), EffortContext()))
-        assertTrue(Effort.cardioQualifies(lazy.copy(reachedTarget = true), EffortContext()))
-        assertTrue(Effort.cardioQualifies(lazy.copy(avgBpm = 0, durationSeconds = 31 * 60), EffortContext()))
-        assertFalse(Effort.cardioQualifies(lazy.copy(avgBpm = 0, durationSeconds = 29 * 60), EffortContext()))
-
-        val result = breakdown(listOf(lazy), today = "2026-10-01")
-        assertEquals(0, result.streakDays)
-        assertTrue(result.cardio > 0)
+    fun aDayCountsForTheStreakAt300Xp() {
+        assertEquals(1, breakdown(listOf(runWorth("2026-10-05", 300)), today = "2026-10-05").streakDays)
+        assertEquals(0, breakdown(listOf(runWorth("2026-10-05", 299)), today = "2026-10-05").streakDays)
+        val result = breakdown(listOf(runWorth("2026-10-05", 299)), today = "2026-10-05")
+        assertFalse(result.todayCounts)
+        assertEquals(299, result.todayXp)
+        assertTrue(breakdown(listOf(runWorth("2026-10-05", 300)), today = "2026-10-05").todayCounts)
     }
 
     @Test
-    fun sevenCountingDaysInARowEarnARestDayAndTheBarShowsTheProgress() {
-        val partway = breakdown(week("2026-10-01", 4), today = "2026-10-04")
-        assertEquals(4, partway.restProgress)
-        assertEquals(0, partway.restCredits)
+    fun cardioAndWorkoutsMixWithinADay() {
+        // 200 from a run and 150 from a workout: 350 together keeps the streak
+        val result = breakdown(listOf(runWorth("2026-10-05", 200)), listOf(workoutWorth("2026-10-05", 150)), today = "2026-10-05")
+        assertEquals(350, result.todayXp)
+        assertEquals(1, result.streakDays)
+        // 350 + 250 reaches 600 and banks a rest day, in one day, from a workout and a run
+        val banked = breakdown(listOf(runWorth("2026-10-05", 300)), listOf(workoutWorth("2026-10-05", 300)), today = "2026-10-05")
+        assertEquals(1, banked.restCredits)
+    }
 
-        val earned = breakdown(week("2026-10-01", 7), today = "2026-10-07")
-        assertEquals(1, earned.restCredits)
-        assertEquals(0, earned.restProgress)
-        assertEquals(7, earned.streakDays)
+    @Test
+    fun aRestDayIsBankedAt600XpAndNoOtherWay() {
+        assertEquals(1, breakdown(listOf(runWorth("2026-10-05", 600)), today = "2026-10-05").restCredits)
+        assertEquals(0, breakdown(listOf(runWorth("2026-10-05", 599)), today = "2026-10-05").restCredits)
+        // a long streak of 300 XP days banks nothing
+        val steady = List(10) { runWorth(day("2026-10-01").plusDays(it.toLong()).toString(), 300) }
+        val result = breakdown(steady, today = "2026-10-10")
+        assertEquals(10, result.streakDays)
+        assertEquals(0, result.restCredits)
     }
 
     @Test
     fun aBankedRestDayCoversAMissedDayAndKeepsTheStreak() {
-        val runs = week("2026-10-01", 7) + run("2026-10-09")   // the 8th is missed
-        val covered = breakdown(runs, today = "2026-10-09")
-        assertEquals(0, covered.missedDays)
-        assertEquals(1, covered.restDaysUsed)
-        assertEquals(0, covered.restCredits)
-        assertEquals(8, covered.streakDays)
+        val runs = listOf(runWorth("2026-10-05", 600), runWorth("2026-10-06", 300), runWorth("2026-10-08", 300))   // the 7th is missed
+        val result = breakdown(runs, today = "2026-10-08")
+        assertEquals(0, result.missedDays)
+        assertEquals(1, result.restDaysUsed)
+        assertEquals(0, result.restCredits)
+        assertEquals(3, result.streakDays)
 
-        val uncovered = breakdown(week("2026-10-01", 3) + run("2026-10-05"), today = "2026-10-05")
+        val uncovered = breakdown(listOf(runWorth("2026-10-05", 300), runWorth("2026-10-07", 300)), today = "2026-10-07")
         assertEquals(1, uncovered.missedDays)
         assertEquals(1, uncovered.streakDays)
     }
 
     @Test
-    fun twoRestDaysCanBeUsedInAWeekButNotThree() {
-        // 14 counting days earn two rest days (one at 7, one at 14); the 15th, 16th and 17th are missed.
-        val runs = week("2026-10-01", 14)
-        val result = breakdown(runs, today = "2026-10-18")
+    fun twoCanBeBankedAWeekOnDifferentDaysAndNoMore() {
+        val runs = listOf(runWorth("2026-10-05", 600), runWorth("2026-10-06", 600), runWorth("2026-10-07", 600))
+        assertEquals(2, breakdown(runs, today = "2026-10-07").restCredits)    // the bank holds two
+
+        // bank two on Monday and Tuesday, use both on Wednesday and Thursday, and a third 600 XP day that week banks nothing
+        val week = listOf(runWorth("2026-10-05", 600), runWorth("2026-10-06", 600), runWorth("2026-10-09", 600))
+        val result = breakdown(week, today = "2026-10-10")
+        assertEquals(2, result.restDaysUsed)
+        assertEquals(0, result.restCredits)   // Friday's 600 XP was a third banked in the week
+    }
+
+    @Test
+    fun onlyTwoCanBeUsedInACalendarWeek() {
+        val banked = listOf(runWorth("2026-10-05", 600), runWorth("2026-10-06", 600)) +
+            (7..11).map { runWorth("2026-10-%02d".format(it), 300) }     // the rest of that week is trained, so nothing is spent yet
+        // next week: Monday to Wednesday missed; two covered, the third costs a level
+        val result = breakdown(banked, today = "2026-10-15")
         assertEquals(2, result.restDaysUsed)
         assertEquals(1, result.missedDays)
-        assertEquals(0, result.restCredits)
+        assertEquals(LocalDate.parse("2026-10-19"), result.nextRestOn)
     }
 
     @Test
-    fun theWeeksRestDaysAreFreeAgainOnceTheyLeaveTheSevenDayWindow() {
-        val runs = week("2026-10-01", 14)
-        // both rest days used on the 15th and 16th: the next is possible from the 22nd
-        val used = breakdown(runs, today = "2026-10-17")
-        assertEquals(2, used.restDaysUsed)
-        assertEquals(LocalDate.parse("2026-10-22"), used.nextRestOn)
-    }
-
-    @Test
-    fun aBigSessionEarnsARestDayButOnlyTwoCanBeBankedAndTwoEarnedAWeek() {
-        // three ordinary runs, then one worth far more than double their usual XP
-        val ordinary = listOf(run("2026-10-01"), run("2026-10-02"), run("2026-10-03"))
-        val big = run("2026-10-04", km = 30f, minutes = 150)
-        val result = breakdown(ordinary + big, today = "2026-10-04")
-        assertEquals(1, result.restCredits)
-
-        // a second big session the next day is the second earned this week, a third in the same week is not
-        val more = listOf(run("2026-10-05", km = 40f, minutes = 200), run("2026-10-06", km = 60f, minutes = 300))
-        val capped = breakdown(ordinary + big + more, today = "2026-10-06")
-        assertEquals(2, capped.restCredits)
-    }
-
-    @Test
-    fun missedDaysBeforePenaltiesBeganAreNotPunishedAndCostNoRestDays() {
-        val runs = week("2026-09-01", 7) + run("2026-09-15")
+    fun missedDaysBeforePenaltiesBeganAreNotPunished() {
+        val runs = listOf(runWorth("2026-09-01", 300), runWorth("2026-09-15", 300))
         val result = breakdown(runs, today = "2026-09-15", penaltiesFrom = "2026-10-01")
         assertEquals(0, result.missedDays)
-        assertEquals(1, result.restCredits)   // earned, but nothing to spend it on
     }
 }
