@@ -126,9 +126,9 @@ class StreakReminderReceiver : BroadcastReceiver() {
             try {
                 val config = StreakReminderRepository(app).current()
                 if (config.enabled && intent.action == ACTION_REMIND) {
-                    val starts = RunHistoryRepository(app).historyFlow.first().map { it.startedAtMillis } +
-                        WorkoutRepository(app).historyFlow.first().map { it.startedAtMillis }
-                    streakAtRisk(starts)?.let { StreakReminder.notify(app, it) }
+                    // The same streak the main menu shows: only sessions that were a real effort count.
+                    val progress = ProgressionInputs.breakdown(app)
+                    if (progress.streakDays > 0 && !progress.todayCounts) StreakReminder.notify(app, progress.streakDays)
                 }
                 StreakReminder.schedule(app, config)
             } finally {

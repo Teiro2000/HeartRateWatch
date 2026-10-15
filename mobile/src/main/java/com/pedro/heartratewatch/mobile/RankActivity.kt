@@ -63,6 +63,7 @@ internal fun rememberBreakdownOrNull(context: Context): Progression.Breakdown? {
     val resetAt by settings.resetAtFlow.collectAsStateWithLifecycle(initialValue = null)
     val penaltiesFrom by settings.penaltiesFromFlow.collectAsStateWithLifecycle(initialValue = null)
     val bonus by settings.bonusXpFlow.collectAsStateWithLifecycle(initialValue = null)
+    val effort by remember { ProgressionInputs.effortFlow(app) }.collectAsStateWithLifecycle(initialValue = null)
     // From the first time levels are shown, a full day without a session costs a level.
     LaunchedEffect(Unit) { settings.ensurePenaltiesStarted() }
     val loadedRuns = runs ?: return null
@@ -70,11 +71,13 @@ internal fun rememberBreakdownOrNull(context: Context): Progression.Breakdown? {
     val loadedResetAt = resetAt ?: return null
     val loadedPenalties = penaltiesFrom ?: return null
     val loadedBonus = bonus ?: return null
-    return remember(loadedRuns, loadedWorkouts, loadedResetAt, loadedPenalties, loadedBonus) {
+    val loadedEffort = effort ?: return null
+    return remember(loadedRuns, loadedWorkouts, loadedResetAt, loadedPenalties, loadedBonus, loadedEffort) {
         Progression.breakdown(
             loadedRuns, loadedWorkouts, loadedResetAt,
             penaltiesFrom = loadedPenalties.takeIf { it != java.time.LocalDate.MAX },
-            bonusXp = loadedBonus
+            bonusXp = loadedBonus,
+            effort = loadedEffort
         )
     }
 }
@@ -116,6 +119,38 @@ internal fun LevelUpHost() {
 }
 
 private fun Int.grouped(): String = NumberFormat.getIntegerInstance().format(this)
+
+/**
+ * Streak protection: how close you are to earning a rest day (7 counting days in a row), and how many are banked.
+ * A banked rest day covers one missed day, once a week, without losing a level or the streak.
+ */
+@Composable
+internal fun RestProgress(breakdown: Progression.Breakdown, onClick: (() -> Unit)? = null) {
+    val full = breakdown.restCredits >= Progression.MAX_REST_CREDITS
+    Column(
+        modifier = Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Streak protection", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "${breakdown.restCredits} of ${Progression.MAX_REST_CREDITS} rest days banked",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        LinearProgressIndicator(
+            progress = { if (full) 1f else breakdown.restProgress.toFloat() / Progression.REST_EARNED_EVERY },
+            modifier = Modifier.fillMaxWidth().height(8.dp)
+        )
+        Text(
+            if (full) "Bank full. Use a rest day before earning another."
+            else "${breakdown.restProgress} of ${Progression.REST_EARNED_EVERY} days in a row to earn a rest day",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 
 /** The compact "Level 12 - Silver" bar on the main menu; tapping it opens [RankActivity]. */
 @Composable
@@ -184,6 +219,15 @@ private fun RankScreen() {
                 modifier = Modifier.fillMaxWidth()
             )
             RankSummary(standing, onClick = {})
+            RestProgress(breakdown)
+            Text(
+                when {
+                    breakdown.nextRestOn != null -> "A rest day was used recently; the next can be used from ${breakdown.nextRestOn}."
+                    breakdown.restCredits > 0 -> "A banked rest day is used automatically on a day you miss, at most once a week."
+                    else -> "Earn a rest day with 7 counting days in a row, or with a big session (double your usual)."
+                },
+                style = MaterialTheme.typography.bodySmall
+            )
             standing.nextRank?.let { next ->
                 val levelsToGo = next.minLevel - standing.level
                 Text(
@@ -204,7 +248,9 @@ private fun RankScreen() {
             XpLine("Total", breakdown.total, bold = true)
             Text(
                 "Cardio: distance and moving time, with a bonus for each target star. Workouts: the session, each set and the weight lifted. " +
-                    "Streak: a little extra for every day you keep your streak going. Each full day without a session costs a level, so keep the streak alive. A level is shared across Cardio and Workout.",
+                    "Streak: a little extra for every day you keep your streak going. A day only counts if the session is a real effort: cardio that reaches its distance target, " +
+                    "or averages at least your lower heart rate for 20 minutes (30 minutes without a heart rate); a workout that does 80% of its template, or 12 sets without one. " +
+                    "Easier sessions still earn their XP but don't keep the streak. Each full day that doesn't count costs a level unless a banked rest day covers it. A level is shared across Cardio and Workout.",
                 style = MaterialTheme.typography.bodySmall
             )
             HorizontalDivider()

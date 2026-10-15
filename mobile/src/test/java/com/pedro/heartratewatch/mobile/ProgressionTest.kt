@@ -55,7 +55,7 @@ class ProgressionTest {
             assertEquals(level, Progression.levelForXp(needed))
             assertEquals(level - 1, Progression.levelForXp(needed - 1))
         }
-        assertTrue(Progression.xpForLevel(10) in 4_000..6_000)
+        assertTrue(Progression.xpForLevel(10) in 7_000..9_000)
         assertEquals("Rookie", Progression.rankForLevel(4).name)
         assertEquals("Bronze", Progression.rankForLevel(5).name)
         assertEquals("Gold", Progression.rankForLevel(29).name)
