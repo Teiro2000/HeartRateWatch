@@ -42,7 +42,7 @@ private val MidColor = Color(0xFFFBC02D)
 private val SlowColor = Color(0xFFE53935)
 
 /** Green for the fastest stretches of a route, through yellow, to red for the slowest. */
-private fun paceColor(slowness: Float): Color =
+internal fun paceColor(slowness: Float): Color =
     if (slowness < 0.5f) lerp(FastColor, MidColor, slowness * 2f) else lerp(MidColor, SlowColor, (slowness - 0.5f) * 2f)
 
 /**
@@ -54,7 +54,7 @@ private fun paceColor(slowness: Float): Color =
  * plain line.
  */
 @Composable
-fun RouteMap(startedAtMillis: Long, unit: DistanceUnit, modifier: Modifier = Modifier) {
+fun RouteMap(startedAtMillis: Long, unit: DistanceUnit, showsSpeed: Boolean = false, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val route by produceState(initialValue = emptyList<RoutePoint>(), startedAtMillis) {
         value = withContext(Dispatchers.IO) { RouteStore(context.applicationContext).load(startedAtMillis) }
@@ -71,6 +71,7 @@ fun RouteMap(startedAtMillis: Long, unit: DistanceUnit, modifier: Modifier = Mod
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(180.dp),
+            onClick = { RouteViewActivity.open(context, startedAtMillis, unit, showsSpeed) },
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -117,6 +118,7 @@ fun RouteMap(startedAtMillis: Long, unit: DistanceUnit, modifier: Modifier = Mod
                 drawCircle(Color(0xFFFF7043), radius = 5.dp.toPx(), center = point(route.lastIndex))
             }
         }
+        Text("Tap the route to see it in 3D", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (slowness != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Faster", style = MaterialTheme.typography.labelSmall)
