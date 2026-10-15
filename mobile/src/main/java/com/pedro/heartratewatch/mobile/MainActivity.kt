@@ -117,6 +117,7 @@ class MainActivity : ComponentActivity() {
 
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
     private val runHistoryRepository by lazy { RunHistoryRepository(applicationContext) }
+    private val calibrationRepository by lazy { CalibrationRepository(applicationContext) }
 
     // Live-only (registered while this Activity is actually open), not manifest-declared --
     // unlike settings/dashboard-stats sync there's nothing useful to cold-start this for: the
@@ -137,6 +138,7 @@ class MainActivity : ComponentActivity() {
             PipBoyTheme {
                 SettingsScreen(
                     settingsRepository,
+                    calibrationRepository,
                     runHistoryRepository
                 )
             }
@@ -152,6 +154,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SettingsScreen(
     repository: SettingsRepository,
+    calibrationRepository: CalibrationRepository,
     runHistoryRepository: RunHistoryRepository
 ) {
     val context = LocalContext.current
@@ -164,6 +167,7 @@ private fun SettingsScreen(
         .collectAsStateWithLifecycle(initialValue = null)
     val selectedCardio by remember { SelectedCardioRepository(context.applicationContext).selectedFlow }
         .collectAsStateWithLifecycle(initialValue = ActivityType.RUN)
+    var settingsExpanded by remember { mutableStateOf(false) }
 
     Scaffold { innerPadding ->
         Column(
@@ -207,6 +211,19 @@ private fun SettingsScreen(
             MenuListRow("History", Icons.Outlined.History) { context.startActivity(Intent(context, RunHistoryActivity::class.java)) }
 
             HorizontalDivider()
+            // The per-activity settings (heart rate, pace, distance target and so on) start closed, down here.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { settingsExpanded = !settingsExpanded }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Settings ${if (settingsExpanded) "▲" else "▼"}", style = MaterialTheme.typography.titleLarge)
+            }
+            HorizontalDivider()
+            if (settingsExpanded) CardioSettingsContent(repository, calibrationRepository)
         }
     }
 }
