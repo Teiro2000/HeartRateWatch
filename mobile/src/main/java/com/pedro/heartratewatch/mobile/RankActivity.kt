@@ -105,7 +105,7 @@ internal fun LevelUpHost() {
     LaunchedEffect(level, celebrated) {
         val last = celebrated ?: return@LaunchedEffect
         when {
-            last == 0 || level < last -> settings.setCelebratedLevel(level)
+            last < 0 || level < last -> settings.setCelebratedLevel(level)
             level > last -> {
                 val rankUp = Progression.rankForLevel(level) != Progression.rankForLevel(last)
                 settings.setCelebratedLevel(level)
@@ -222,8 +222,8 @@ private fun RankScreen() {
             RestProgress(breakdown)
             Text(
                 when {
-                    breakdown.nextRestOn != null -> "A rest day was used recently; the next can be used from ${breakdown.nextRestOn}."
-                    breakdown.restCredits > 0 -> "A banked rest day is used automatically on a day you miss, at most once a week."
+                    breakdown.nextRestOn != null -> "This week's two rest days are used; the next can be used from ${breakdown.nextRestOn}."
+                    breakdown.restCredits > 0 -> "Banked rest days cover days you skip (the weekend, say), up to two a week."
                     else -> "Earn a rest day with 7 counting days in a row, or with a big session (double your usual)."
                 },
                 style = MaterialTheme.typography.bodySmall

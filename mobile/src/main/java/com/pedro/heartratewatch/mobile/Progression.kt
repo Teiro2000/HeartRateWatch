@@ -96,13 +96,14 @@ object Progression {
      * A session earns its XP always, but only one that meets the effort bar ([Effort], via [effort]) counts for
      * the day: it extends the streak and earns the streak bonus. On a day without a counting session (a full
      * day, from [penaltiesFrom] on) one of two things happens:
-     *  - a banked rest day covers it, if there is one and none was used in the last 7 days: no level is lost
-     *    and the streak carries on;
+     *  - a banked rest day covers it, if there is one and fewer than [MAX_USED_PER_WEEK] were used in the last
+     *    7 days: no level is lost and the streak carries on;
      *  - otherwise a level is lost (exactly one, never below level 1) and the streak resets.
      * Rest days are earned: one for every 7 counting days in a row, and one for a big session (counting,
      * and worth at least [BIG_SESSION_FACTOR] times the median of the last [BIG_SESSION_WINDOW] sessions of its
-     * kind). At most [MAX_REST_CREDITS] are banked, and at most [MAX_EARNED_PER_WEEK] can be earned in any
-     * 7 days. Today isn't judged until it is over. Nothing is
+     * kind). At most [MAX_REST_CREDITS] are banked, at most [MAX_EARNED_PER_WEEK] can be earned in any 7 days,
+     * and at most [MAX_USED_PER_WEEK] used in any 7 days. A rest day covers whichever day is skipped, so you choose
+     * your rest days (the weekend, say) simply by not training. Today isn't judged until it is over. Nothing is
      * penalised before [penaltiesFrom], so a gap in old history costs nothing.
      */
     fun breakdown(
@@ -149,7 +150,7 @@ object Progression {
         var credits = 0
         var countingRun = 0   // consecutive counting days, towards the next rest day
         var streakRun = 0     // the streak: counting days, with rest days carrying it over
-        var lastRest: java.time.LocalDate? = null
+        val restOn = mutableListOf<java.time.LocalDate>()
         val earnedOn = mutableListOf<java.time.LocalDate>()
         var day = byDay.keys.min()
         fun earn(on: java.time.LocalDate) {
@@ -175,10 +176,10 @@ object Progression {
                 if (list.any { it.counts && it.big }) earn(day)
             } else if (day.isBefore(today)) {
                 val penalised = penaltiesFrom != null && !day.isBefore(penaltiesFrom)
-                val restReady = credits > 0 && (lastRest == null || java.time.temporal.ChronoUnit.DAYS.between(lastRest, day) >= REST_MIN_GAP_DAYS)
+                val restReady = credits > 0 && restOn.count { it.isAfter(day.minusDays(7)) } < MAX_USED_PER_WEEK
                 if (penalised && restReady) {
                     credits--
-                    lastRest = day
+                    restOn += day
                     restUsed++
                     countingRun = 0
                 } else {
@@ -188,7 +189,7 @@ object Progression {
                         missedDays++
                         // Exactly one level down, keeping the progress made within the level (as far as the lower level has room for).
                         val level = levelForXp(xp)
-                        if (level > 1) {
+                        if (level > 0) {
                             val into = xp - xpForLevel(level)
                             val room = xpForLevel(level) - xpForLevel(level - 1) - 1
                             xp = xpForLevel(level - 1) + min(into, room)
@@ -199,7 +200,9 @@ object Progression {
             day = day.plusDays(1)
         }
         val gained = cardio + workoutTotal + streakBonusTotal
-        val nextRest = lastRest?.plusDays(REST_MIN_GAP_DAYS.toLong())?.takeIf { it.isAfter(today) }
+        // If the week's allowance is used up, the day the oldest of those rest days leaves the 7-day window.
+        val recentRest = restOn.filter { it.isAfter(today.minusDays(7)) }
+        val nextRest = if (recentRest.size >= MAX_USED_PER_WEEK) recentRest.min().plusDays(7) else null
         return Breakdown(
             cardio, workoutTotal, streakBonusTotal,
             missedDays = missedDays, lost = gained - xp, bonus = bonusXp,
@@ -211,22 +214,22 @@ object Progression {
 
     const val MAX_REST_CREDITS = 2
     const val MAX_EARNED_PER_WEEK = 2
+    const val MAX_USED_PER_WEEK = 2
     const val REST_EARNED_EVERY = 7
-    private const val REST_MIN_GAP_DAYS = 7
     private const val BIG_SESSION_FACTOR = 2.0
     private const val BIG_SESSION_WINDOW = 10
     private const val BIG_SESSION_MIN_HISTORY = 3
 
     // ---------------------------------------------------------------- levels
 
-    /** Total XP needed to reach [level] (level 1 is where everyone starts, at 0). */
+    /** Total XP needed to reach [level]. Everyone starts at level 0, with 0 XP. */
     fun xpForLevel(level: Int): Int =
-        if (level <= 1) 0 else (LEVEL_SCALE * (level - 1).toDouble().pow(LEVEL_POWER)).roundToInt()
+        if (level <= 0) 0 else (LEVEL_SCALE * level.toDouble().pow(LEVEL_POWER)).roundToInt()
 
     fun levelForXp(xp: Int): Int {
-        var level = max(1, (xp / LEVEL_SCALE).pow(1.0 / LEVEL_POWER).toInt())
+        var level = max(0, (xp / LEVEL_SCALE).pow(1.0 / LEVEL_POWER).toInt())
         while (xpForLevel(level + 1) <= xp) level++
-        while (level > 1 && xpForLevel(level) > xp) level--
+        while (level > 0 && xpForLevel(level) > xp) level--
         return level
     }
 
@@ -261,7 +264,7 @@ object Progression {
 
     /** Lowest level first. Reaching [minLevel] earns the rank. */
     val RANKS = listOf(
-        Rank("Rookie", 1, Color(0xFF9E9E9E)),
+        Rank("Rookie", 0, Color(0xFF9E9E9E)),
         Rank("Bronze", 5, Color(0xFFCD7F32)),
         Rank("Silver", 10, Color(0xFFB0BEC5)),
         Rank("Gold", 20, Color(0xFFFFC107)),
@@ -274,7 +277,7 @@ object Progression {
 
     fun rankForLevel(level: Int): Rank = RANKS.last { it.minLevel <= level }
 
-    // Level n needs 123 x (n-1)^1.9 XP: level 10 is around 8,000 XP, level 25 around 50,000, level 50 around 200,000.
+    // Level n needs 123 x n^1.9 XP: level 10 is around 9,800 XP, level 25 around 56,000, level 50 around 230,000.
     private const val LEVEL_SCALE = 123.0
     private const val LEVEL_POWER = 1.9
 }

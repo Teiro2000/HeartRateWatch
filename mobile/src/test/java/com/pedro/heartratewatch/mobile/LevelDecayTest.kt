@@ -54,7 +54,7 @@ class LevelDecayTest {
     fun theLevelNeverGoesBelowTheStart() {
         val runs = listOf(bigRun("2026-10-01"))
         val result = Progression.breakdown(runs, emptyList(), penaltiesFrom = day("2026-10-01"), today = day("2026-12-01"), zone = zone)
-        assertEquals(1, Progression.levelForXp(result.total))
+        assertEquals(0, Progression.levelForXp(result.total))
         assertTrue(result.total >= 0)
     }
 
@@ -65,6 +65,6 @@ class LevelDecayTest {
         assertEquals(Progression.cardioXp(runs[1]), result.cardio)
         val fresh = Progression.breakdown(runs, emptyList(), sinceMillis = at("2026-10-20"), penaltiesFrom = day("2026-10-20"), today = day("2026-10-25"), zone = zone)
         assertEquals(0, fresh.total)
-        assertEquals(1, Progression.levelForXp(fresh.total))
+        assertEquals(0, Progression.levelForXp(fresh.total))
     }
 }

@@ -66,12 +66,22 @@ class RestDayTest {
     }
 
     @Test
-    fun onlyOneRestDayCanBeUsedInAWeek() {
-        // 7 days earns one rest day; a big session adds a second; two missed days in a row can use only one.
-        val runs = week("2026-10-01", 7)
-        val result = breakdown(runs, today = "2026-10-10")   // the 8th and 9th missed, today (10th) not over
-        assertEquals(1, result.restDaysUsed)
+    fun twoRestDaysCanBeUsedInAWeekButNotThree() {
+        // 14 counting days earn two rest days (one at 7, one at 14); the 15th, 16th and 17th are missed.
+        val runs = week("2026-10-01", 14)
+        val result = breakdown(runs, today = "2026-10-18")
+        assertEquals(2, result.restDaysUsed)
         assertEquals(1, result.missedDays)
+        assertEquals(0, result.restCredits)
+    }
+
+    @Test
+    fun theWeeksRestDaysAreFreeAgainOnceTheyLeaveTheSevenDayWindow() {
+        val runs = week("2026-10-01", 14)
+        // both rest days used on the 15th and 16th: the next is possible from the 22nd
+        val used = breakdown(runs, today = "2026-10-17")
+        assertEquals(2, used.restDaysUsed)
+        assertEquals(LocalDate.parse("2026-10-22"), used.nextRestOn)
     }
 
     @Test
