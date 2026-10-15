@@ -84,7 +84,7 @@ fun NavButtons(onBack: (() -> Unit)?, onMainMenu: () -> Unit) {
     // Two separate bordered buttons with a clear gap, so Back can't be mistaken for Main menu.
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.padding(vertical = 4.dp)) {
         if (onBack != null) OutlinedButton(onClick = onBack) { Text("< Back") }
-        OutlinedButton(onClick = onMainMenu) { Text("Main menu") }
+        OutlinedButton(onClick = onMainMenu) { Text("Main Menu") }
     }
 }
 

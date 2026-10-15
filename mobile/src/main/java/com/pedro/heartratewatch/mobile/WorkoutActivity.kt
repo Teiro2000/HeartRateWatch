@@ -1133,7 +1133,7 @@ private fun HistoryScreen(
                         onClick = { confirmDeleteAll = true },
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                    ) { Text("Remove all workouts", color = MaterialTheme.colorScheme.error) }
+                    ) { Text("Remove All Workouts", color = MaterialTheme.colorScheme.error) }
                 }
             }
             items(history, key = { it.id }) { workout ->
@@ -1153,7 +1153,7 @@ private fun HistoryScreen(
     if (confirmDeleteAll) {
         ConfirmDialog(
             text = "Are you sure you want to remove all ${history.size} workouts? This can't be undone.",
-            confirmLabel = "Remove all",
+            confirmLabel = "Remove All",
             onConfirm = { confirmDeleteAll = false; onDeleteAll() },
             onDismiss = { confirmDeleteAll = false }
         )
