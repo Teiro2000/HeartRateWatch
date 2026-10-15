@@ -59,8 +59,6 @@ class AppSettingsActivity : ComponentActivity() {
     private val reminderRepository by lazy { StreakReminderRepository(applicationContext) }
     private val alertPlayer by lazy { AlertPlayer(applicationContext) }
     private val workoutRepository by lazy { WorkoutRepository(applicationContext) }
-    private val cardioSettingsRepository by lazy { SettingsRepository(applicationContext) }
-    private val calibrationRepository by lazy { CalibrationRepository(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,7 +66,7 @@ class AppSettingsActivity : ComponentActivity() {
             PipBoyTheme {
                 AppSettingsScreen(
                     themePreferenceRepository, reminderRepository, alertPlayer,
-                    workoutRepository, cardioSettingsRepository, calibrationRepository
+                    workoutRepository
                 )
             }
         }
@@ -80,9 +78,7 @@ private fun AppSettingsScreen(
     themePreferenceRepository: ThemePreferenceRepository,
     reminderRepository: StreakReminderRepository,
     alertPlayer: AlertPlayer,
-    workoutRepository: WorkoutRepository,
-    cardioSettingsRepository: SettingsRepository,
-    calibrationRepository: CalibrationRepository
+    workoutRepository: WorkoutRepository
 ) {
     LevelUpHost()
     val scope = rememberCoroutineScope()
@@ -182,12 +178,6 @@ private fun AppSettingsScreen(
                 }
             }
             HorizontalDivider()
-            var cardioOpen by remember { mutableStateOf(false) }
-            AccordionSection(
-                "Cardio settings",
-                expanded = cardioOpen,
-                onToggle = { cardioOpen = !cardioOpen }
-            ) {
             // Cardio: the unit distances are shown in on the phone, ahead of the distance target's own unit.
             val displayRepo = remember { DisplayDistanceUnitRepository(context.applicationContext) }
             val displayOverride by displayRepo.overrideFlow.collectAsStateWithLifecycle(initialValue = null)
@@ -222,6 +212,7 @@ private fun AppSettingsScreen(
                     }
                 }
             }
+            HorizontalDivider()
             var soundsOpen by remember { mutableStateOf(false) }
             val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
             AccordionSection(
@@ -242,8 +233,6 @@ private fun AppSettingsScreen(
                         onVolumeChange = { alertPlayer.setVolumeDb(type, it) }
                     )
                 }
-            }
-                CardioSettingsContent(cardioSettingsRepository, calibrationRepository)
             }
             // Backup: everything on this phone in one file, and back again.
             var backupMessage by remember { mutableStateOf<String?>(null) }
