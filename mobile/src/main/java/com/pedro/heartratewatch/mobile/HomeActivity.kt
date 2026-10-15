@@ -130,9 +130,17 @@ private fun HomeScreen() {
     val workouts by remember { WorkoutRepository(context.applicationContext).historyFlow }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val allStarts = runs.map { it.startedAtMillis } + workouts.map { it.startedAtMillis }
+    LevelUpHost()
     val standing = Progression.standing(rememberBreakdown(context).total)
     val streak = streakDays(allStarts)
     // Re-arm the daily reminder alarm whenever the app opens (it's cleared if the app was force-stopped).
+    // Right after a restore from a backup, the restored settings and stats go to the watch.
+    LaunchedEffect(Unit) {
+        if (Backup.takeNeedsResync(context.applicationContext)) {
+            SettingsRepository(context.applicationContext).resyncToWatch()
+            RunHistoryRepository(context.applicationContext).resyncWatchStats()
+        }
+    }
     // Sessions the watch finished while the phone was out of reach are picked up now.
     LaunchedEffect(Unit) { SessionIngest.pullPending(context.applicationContext) }
     val recordsRepository = remember { RecordsRepository(context.applicationContext) }

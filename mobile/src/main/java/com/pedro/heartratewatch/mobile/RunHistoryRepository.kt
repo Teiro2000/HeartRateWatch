@@ -148,6 +148,9 @@ class RunHistoryRepository(private val context: Context) {
      * in MainActivity.kt) to the watch, so the tile can show them too while idle -- the watch has
      * no run history of its own, only these three derived numbers.
      */
+    /** Pushes the streak and monthly numbers to the watch again (used after restoring a backup). */
+    suspend fun resyncWatchStats() = pushDashboardStatsToWatch()
+
     private suspend fun pushDashboardStatsToWatch() {
         val runs = historyFlow.first()
         val request = PutDataMapRequest.create(DataLayerPaths.DASHBOARD_STATS_SYNC).apply {

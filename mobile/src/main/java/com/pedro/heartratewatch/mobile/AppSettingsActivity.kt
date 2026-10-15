@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
@@ -80,6 +82,7 @@ private fun AppSettingsScreen(
     cardioSettingsRepository: SettingsRepository,
     calibrationRepository: CalibrationRepository
 ) {
+    LevelUpHost()
     val scope = rememberCoroutineScope()
     val useLightTheme by themePreferenceRepository.useLightThemeFlow.collectAsStateWithLifecycle(initialValue = false)
     val back = rememberSystemBack()
@@ -244,6 +247,73 @@ private fun AppSettingsScreen(
             }
                 CardioSettingsContent(cardioSettingsRepository, calibrationRepository)
             }
+            // Backup: everything on this phone in one file, and back again.
+            var backupMessage by remember { mutableStateOf<String?>(null) }
+            var confirmRestore by remember { mutableStateOf(false) }
+            val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+                if (uri != null) scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching { context.contentResolver.openOutputStream(uri)!!.use { Backup.write(context.applicationContext, it) } }
+                    }
+                    backupMessage = result.fold({ "Backup saved." }, { "Couldn't write the backup: ${it.message ?: "unknown error"}" })
+                }
+            }
+            val pickBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) scope.launch {
+                    val restored = withContext(Dispatchers.IO) {
+                        runCatching { context.contentResolver.openInputStream(uri)!!.use { Backup.restore(context.applicationContext, it) } }
+                            .getOrDefault(false)
+                    }
+                    // On success the app restarts itself, so only a bad file gets here.
+                    if (!restored) backupMessage = "That isn't a PulseGuard backup, so nothing was changed."
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Backup")
+                    Text(
+                        "All your history, settings and routes in one file. Custom alert sounds aren't included.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = {
+                        saveBackup.launch("PulseGuard backup ${java.time.LocalDate.now()}.zip")
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Back up") }
+                    OutlinedButton(onClick = { confirmRestore = true }, modifier = Modifier.fillMaxWidth()) { Text("Restore") }
+                }
+            }
+            HorizontalDivider()
+            if (confirmRestore) {
+                AlertDialog(
+                    onDismissRequest = { confirmRestore = false },
+                    title = { Text("Restore from a backup?") },
+                    text = {
+                        Text(
+                            "Everything on this phone (history, workouts, settings, routes, level) is replaced by what's in the backup, " +
+                                "and the app restarts. Back up first if you want to keep what's here."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmRestore = false
+                            pickBackup.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                        }) { Text("Choose backup") }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmRestore = false }) { Text("Cancel") } }
+                )
+            }
+            backupMessage?.let { message ->
+                AlertDialog(
+                    onDismissRequest = { backupMessage = null },
+                    text = { Text(message) },
+                    confirmButton = { TextButton(onClick = { backupMessage = null }) { Text("OK") } }
+                )
+            }
             // Level: start over from level 1 (history, streak and personal bests are untouched).
             var confirmReset by remember { mutableStateOf(false) }
             Row(
@@ -280,6 +350,31 @@ private fun AppSettingsScreen(
                     dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
                 )
             }
+            // Testing: trying the level-up moment without waiting to earn a level.
+            val levelBreakdown = rememberBreakdown(context)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Test level up")
+                    Text("Adds a level so you can see the level-up moment. Clear removes the test levels.", style = MaterialTheme.typography.bodySmall)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            val level = Progression.levelForXp(levelBreakdown.total)
+                            ProgressionSettingsRepository(context.applicationContext)
+                                .addBonusXp(Progression.xpForLevel(level + 1) - levelBreakdown.total)
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("+1 level") }
+                    OutlinedButton(onClick = {
+                        scope.launch { ProgressionSettingsRepository(context.applicationContext).clearBonusXp() }
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Clear") }
+                }
+            }
+            HorizontalDivider()
         }
     }
 }
