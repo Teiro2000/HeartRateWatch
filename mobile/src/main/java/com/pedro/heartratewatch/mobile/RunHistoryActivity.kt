@@ -167,12 +167,12 @@ private fun RunHistoryScreen(
     if (confirmRemoveAll) {
         AlertDialog(
             onDismissRequest = { confirmRemoveAll = false },
-            text = { Text("Are you sure you want to remove all ${runs.size} workouts? This can't be undone.") },
+            text = { Text("Are you sure you want to remove all ${runs.size} cardio sessions? This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemoveAll = false
                     scope.launch { repository.removeAllRuns() }
-                }) { Text("Remove all") }
+                }) { Text("Remove All") }
             },
             dismissButton = { TextButton(onClick = { confirmRemoveAll = false }) { Text("Cancel") } }
         )
@@ -197,7 +197,7 @@ private fun RunHistoryScreen(
                     onClick = { confirmRemoveAll = true },
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Remove all workouts", color = MaterialTheme.colorScheme.error) }
+                ) { Text("Remove All Cardio Sessions", color = MaterialTheme.colorScheme.error) }
             }
             Spacer(Modifier.height(16.dp))
 
