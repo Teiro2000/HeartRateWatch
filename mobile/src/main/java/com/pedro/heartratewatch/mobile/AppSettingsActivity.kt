@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.AlertDialog
@@ -280,7 +282,8 @@ private fun AppSettingsScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // As wide as the widest button, so the text beside it keeps the rest of the row.
+                Column(modifier = Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(onClick = {
                         saveBackup.launch("PulseGuard backup ${java.time.LocalDate.now()}.zip")
                     }, modifier = Modifier.fillMaxWidth()) { Text("Back up") }
@@ -361,7 +364,8 @@ private fun AppSettingsScreen(
                     Text("Test level up")
                     Text("Adds a level so you can see the level-up moment. Clear removes the test levels.", style = MaterialTheme.typography.bodySmall)
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // As wide as the widest button, so the text beside it keeps the rest of the row.
+                Column(modifier = Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(onClick = {
                         scope.launch {
                             val level = Progression.levelForXp(levelBreakdown.total)
