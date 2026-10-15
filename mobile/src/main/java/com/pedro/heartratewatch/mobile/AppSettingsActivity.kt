@@ -181,42 +181,6 @@ private fun AppSettingsScreen(
                 }
             }
             HorizontalDivider()
-            // Level: start over from level 1 (history, streak and personal bests are untouched).
-            var confirmReset by remember { mutableStateOf(false) }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Level")
-                    Text("Start over from level 1. Your history isn't touched.", style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedButton(
-                    onClick = { confirmReset = true },
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                ) { Text("Reset", color = MaterialTheme.colorScheme.error) }
-            }
-            HorizontalDivider()
-            if (confirmReset) {
-                AlertDialog(
-                    onDismissRequest = { confirmReset = false },
-                    title = { Text("Reset your level?") },
-                    text = {
-                        Text(
-                            "Your level and rank go back to the start and only sessions from now on earn XP. " +
-                                "Your history, streak and personal bests stay exactly as they are. This can't be undone."
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            confirmReset = false
-                            scope.launch { ProgressionSettingsRepository(context.applicationContext).reset() }
-                        }) { Text("Reset", color = MaterialTheme.colorScheme.error) }
-                    },
-                    dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
-                )
-            }
             var cardioOpen by remember { mutableStateOf(false) }
             AccordionSection(
                 "Cardio settings",
@@ -279,6 +243,42 @@ private fun AppSettingsScreen(
                 }
             }
                 CardioSettingsContent(cardioSettingsRepository, calibrationRepository)
+            }
+            // Level: start over from level 1 (history, streak and personal bests are untouched).
+            var confirmReset by remember { mutableStateOf(false) }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Level")
+                    Text("Start over from level 1. Your history isn't touched.", style = MaterialTheme.typography.bodySmall)
+                }
+                OutlinedButton(
+                    onClick = { confirmReset = true },
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                ) { Text("Reset", color = MaterialTheme.colorScheme.error) }
+            }
+            HorizontalDivider()
+            if (confirmReset) {
+                AlertDialog(
+                    onDismissRequest = { confirmReset = false },
+                    title = { Text("Reset your level?") },
+                    text = {
+                        Text(
+                            "Your level and rank go back to the start and only sessions from now on earn XP. " +
+                                "Your history, streak and personal bests stay exactly as they are. This can't be undone."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmReset = false
+                            scope.launch { ProgressionSettingsRepository(context.applicationContext).reset() }
+                        }) { Text("Reset", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
+                )
             }
         }
     }
