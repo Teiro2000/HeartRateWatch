@@ -277,7 +277,7 @@ private fun RunRow(
                 Text("${Progression.cardioXp(run)} XP", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             // The route, for sessions that recorded one (outdoor, from the watch or the phone).
-            if (run.activityType.usesGps) RouteMap(run.startedAtMillis)
+            if (run.activityType.usesGps) RouteMap(run.startedAtMillis, distanceUnit)
             Text("Duration: %d:%02d".format(run.durationSeconds / 60, run.durationSeconds % 60))
             if (run.stoppedSeconds > 0) {
                 Text("Time stopped: %d:%02d".format(run.stoppedSeconds / 60, run.stoppedSeconds % 60))

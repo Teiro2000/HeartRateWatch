@@ -260,7 +260,7 @@ class ExerciseSessionService : LifecycleService() {
                     this,
                     maxSpeedMetersPerSecond = if (trackStops) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
                     else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND,
-                    onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon) }
+                    onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon, System.currentTimeMillis()) }
                 ) { meters -> onSample(null, meters) }.also { it.start() }
             }
         } catch (e: SecurityException) {
