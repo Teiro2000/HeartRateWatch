@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -47,7 +48,12 @@ internal fun rememberBreakdown(context: Context): Progression.Breakdown {
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val workouts by remember { WorkoutRepository(context.applicationContext).historyFlow }
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    return remember(runs, workouts) { Progression.breakdown(runs, workouts) }
+    val settings = remember { ProgressionSettingsRepository(context.applicationContext) }
+    val resetAt by settings.resetAtFlow.collectAsStateWithLifecycle(initialValue = 0L)
+    val penaltiesFrom by settings.penaltiesFromFlow.collectAsStateWithLifecycle(initialValue = null)
+    // From the first time levels are shown, a full day without a session costs a level.
+    LaunchedEffect(Unit) { settings.ensurePenaltiesStarted() }
+    return remember(runs, workouts, resetAt, penaltiesFrom) { Progression.breakdown(runs, workouts, resetAt, penaltiesFrom) }
 }
 
 private fun Int.grouped(): String = NumberFormat.getIntegerInstance().format(this)
@@ -134,10 +140,11 @@ private fun RankScreen() {
             XpLine("Cardio", breakdown.cardio)
             XpLine("Workouts", breakdown.workouts)
             XpLine("Streak bonus", breakdown.streak)
+            if (breakdown.missedDays > 0) XpLine("Missed days (${breakdown.missedDays}, a level each)", -breakdown.lost)
             XpLine("Total", breakdown.total, bold = true)
             Text(
                 "Cardio: distance and moving time, with a bonus for each target star. Workouts: the session, each set and the weight lifted. " +
-                    "Streak: a little extra for every day you keep your streak going. A level is shared across Cardio and Workout.",
+                    "Streak: a little extra for every day you keep your streak going. Each full day without a session costs a level, so keep the streak alive. A level is shared across Cardio and Workout.",
                 style = MaterialTheme.typography.bodySmall
             )
             HorizontalDivider()

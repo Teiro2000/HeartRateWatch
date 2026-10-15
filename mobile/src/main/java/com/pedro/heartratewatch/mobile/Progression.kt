@@ -24,8 +24,16 @@ import kotlin.math.roundToInt
  */
 object Progression {
 
-    data class Breakdown(val cardio: Int, val workouts: Int, val streak: Int) {
-        val total: Int get() = cardio + workouts + streak
+    data class Breakdown(
+        val cardio: Int,
+        val workouts: Int,
+        val streak: Int,
+        /** Full days without a session since penalties began, each of which cost a level. */
+        val missedDays: Int = 0,
+        /** The XP those missed days took away. */
+        val lost: Int = 0
+    ) {
+        val total: Int get() = cardio + workouts + streak - lost
     }
 
     fun cardioXp(run: RunSummary): Int {
@@ -64,11 +72,60 @@ object Progression {
         return bonus
     }
 
-    fun breakdown(runs: List<RunSummary>, workouts: List<WorkoutLog>): Breakdown = Breakdown(
-        cardio = runs.sumOf { cardioXp(it) },
-        workouts = workouts.sumOf { workoutXp(it) },
-        streak = streakXp(runs.map { it.startedAtMillis } + workouts.map { it.startedAtMillis })
-    )
+    /**
+     * Everything from [sinceMillis] on (a level reset moves this forward), replayed day by day: a day
+     * with a session adds its XP and streak bonus; a full day without one, from [penaltiesFrom] on, takes
+     * away one level (the XP that level's span is worth, never below 0). Today isn't penalised until it
+     * is over, matching a streak that is still alive if you were active yesterday. Nothing is penalised
+     * before [penaltiesFrom] or before the first session counted, so a break in old history costs nothing.
+     */
+    fun breakdown(
+        runs: List<RunSummary>,
+        workouts: List<WorkoutLog>,
+        sinceMillis: Long = 0L,
+        penaltiesFrom: java.time.LocalDate? = null,
+        today: java.time.LocalDate = java.time.LocalDate.now(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): Breakdown {
+        val counted = runs.filter { it.startedAtMillis >= sinceMillis }
+        val countedWorkouts = workouts.filter { it.startedAtMillis >= sinceMillis }
+        val cardio = counted.sumOf { cardioXp(it) }
+        val workoutTotal = countedWorkouts.sumOf { workoutXp(it) }
+        val starts = counted.map { it.startedAtMillis } + countedWorkouts.map { it.startedAtMillis }
+        val streak = streakXp(starts, zone)
+        if (penaltiesFrom == null || starts.isEmpty()) return Breakdown(cardio, workoutTotal, streak)
+
+        fun dayOf(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+        val sessionXp = HashMap<java.time.LocalDate, Int>()
+        counted.forEach { sessionXp.merge(dayOf(it.startedAtMillis), cardioXp(it), Int::plus) }
+        countedWorkouts.forEach { sessionXp.merge(dayOf(it.startedAtMillis), workoutXp(it), Int::plus) }
+        val activeDays = sessionXp.keys.sorted()
+
+        var xp = 0
+        var missedDays = 0
+        var run = 0
+        var previousActive: java.time.LocalDate? = null
+        var day = activeDays.first()
+        while (!day.isAfter(today)) {
+            val earned = sessionXp[day]
+            if (earned != null) {
+                run = if (previousActive != null && day == previousActive.plusDays(1)) run + 1 else 1
+                xp += earned + 5 * min(run, 10)
+                previousActive = day
+            } else if (day.isBefore(today) && !day.isBefore(penaltiesFrom)) {
+                val level = levelForXp(xp)
+                if (level > 1) {
+                    xp = max(0, xp - (xpForLevel(level) - xpForLevel(level - 1)))
+                    missedDays++
+                } else {
+                    missedDays++
+                }
+            }
+            day = day.plusDays(1)
+        }
+        val gained = cardio + workoutTotal + streak
+        return Breakdown(cardio, workoutTotal, streak, missedDays = missedDays, lost = gained - xp)
+    }
 
     // ---------------------------------------------------------------- levels
 
