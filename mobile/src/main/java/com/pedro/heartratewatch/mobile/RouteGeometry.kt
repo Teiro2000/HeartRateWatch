@@ -61,6 +61,52 @@ object RouteGeometry {
         return out
     }
 
+    /** Heights along a route, cleaned up for drawing and for climb totals. */
+    class Elevation(val meters: DoubleArray, val climb: Double, val descent: Double, val min: Double, val max: Double)
+
+    /**
+     * The route's altitude at each point, smoothed over [window] points (GPS height is noisy), with points that have no
+     * altitude taking the nearest one that does. Null when no point has an altitude (routes from before heights were kept).
+     * The climb and descent only count rises and falls bigger than [threshold] meters, so noise doesn't add up to a hill.
+     */
+    fun elevation(points: List<RoutePoint>, window: Int = 5, threshold: Double = 3.0): Elevation? {
+        val known = points.indices.filter { points[it].hasAltitude }
+        if (known.isEmpty()) return null
+        val filled = DoubleArray(points.size) { i ->
+            if (points[i].hasAltitude) points[i].altitudeMeters
+            else points[known.minBy { k -> kotlin.math.abs(k - i) }].altitudeMeters
+        }
+        val half = max(0, window / 2)
+        val smooth = DoubleArray(points.size) { i ->
+            val from = max(0, i - half)
+            val to = min(points.size - 1, i + half)
+            var sum = 0.0
+            for (j in from..to) sum += filled[j]
+            sum / (to - from + 1)
+        }
+        var climb = 0.0
+        var descent = 0.0
+        var reference = smooth[0]
+        for (a in smooth) {
+            if (a > reference + threshold) { climb += a - reference; reference = a }
+            else if (a < reference - threshold) { descent += reference - a; reference = a }
+        }
+        return Elevation(smooth, climb, descent, smooth.min(), smooth.max())
+    }
+
+    /** Pace in seconds per kilometer around point [index] (a few points either side), or null without times or movement. */
+    fun paceSecPerKm(points: List<RoutePoint>, index: Int, radius: Int = 2): Int? {
+        if (points.size < 2) return null
+        val from = max(0, index - radius)
+        val to = min(points.size - 1, index + radius)
+        if (from >= to || points[from].timeMillis <= 0L || points[to].timeMillis <= 0L) return null
+        var meters = 0.0
+        for (i in from until to) meters += distanceMeters(points[i], points[i + 1])
+        val seconds = (points[to].timeMillis - points[from].timeMillis) / 1000.0
+        if (meters < 5.0 || seconds <= 0.0) return null
+        return (seconds / meters * 1000.0).toInt()
+    }
+
     /**
      * How slow each segment (point to the next) was compared with the rest of the same route, from 0 (the fastest
      * stretches) to 1 (the slowest), or null when the route has no times. Each value averages a few segments around it, so

@@ -38,6 +38,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".RouteViewActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".SelectExerciseActivity"
             android:exported="false" />
 

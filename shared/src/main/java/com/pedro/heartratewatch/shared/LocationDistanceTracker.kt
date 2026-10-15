@@ -28,8 +28,8 @@ import kotlin.math.max
 class LocationDistanceTracker(
     context: Context,
     private val maxSpeedMetersPerSecond: Float = MAX_FOOT_SPEED_METERS_PER_SECOND,
-    /** Called with each position that was accepted as real movement (and the very first fix): the points of the route. */
-    private val onPoint: ((latitude: Double, longitude: Double) -> Unit)? = null,
+    /** Called with each position that was accepted as real movement (and the very first fix): the points of the route, with the fix's GPS altitude (NaN if it has none). */
+    private val onPoint: ((latitude: Double, longitude: Double, altitudeMeters: Double) -> Unit)? = null,
     private val onDistance: (Float) -> Unit
 ) {
     private val client = LocationServices.getFusedLocationProviderClient(context)
@@ -58,6 +58,8 @@ class LocationDistanceTracker(
         client.removeLocationUpdates(callback)
     }
 
+    private fun gpsAltitude(fix: Location): Double = if (fix.hasAltitude()) fix.altitude else Double.NaN
+
     private fun accept(fix: Location) {
         if (fix.hasAccuracy() && fix.accuracy > MAX_ACCURACY_METERS) {
             Log.i(TAG, "dropped: accuracy ${fix.accuracy}m > $MAX_ACCURACY_METERS")
@@ -67,7 +69,7 @@ class LocationDistanceTracker(
         val from = anchor
         if (from == null) {
             anchor = fix
-            onPoint?.invoke(fix.latitude, fix.longitude)
+            onPoint?.invoke(fix.latitude, fix.longitude, gpsAltitude(fix))
             onDistance(totalMeters)
             return
         }
@@ -95,7 +97,7 @@ class LocationDistanceTracker(
         if (counted) {
             totalMeters += delta
             anchor = fix
-            onPoint?.invoke(fix.latitude, fix.longitude)
+            onPoint?.invoke(fix.latitude, fix.longitude, gpsAltitude(fix))
         }
         onDistance(totalMeters)
     }

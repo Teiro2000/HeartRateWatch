@@ -1,6 +1,7 @@
 package com.pedro.heartratewatch.mobile
 
 import android.content.Context
+import com.pedro.heartratewatch.shared.DecodedRoute
 import com.pedro.heartratewatch.shared.RouteCodec
 import com.pedro.heartratewatch.shared.RoutePoint
 import java.io.File
@@ -19,8 +20,11 @@ class RouteStore(context: Context) {
         runCatching { file(startedAtMillis).writeBytes(encoded) }
     }
 
-    fun load(startedAtMillis: Long): List<RoutePoint> =
-        runCatching { RouteCodec.decode(file(startedAtMillis).readBytes()) }.getOrDefault(emptyList())
+    fun load(startedAtMillis: Long): List<RoutePoint> = loadRoute(startedAtMillis).points
+
+    /** The route with whether its heights came from a barometer. */
+    fun loadRoute(startedAtMillis: Long): DecodedRoute =
+        runCatching { RouteCodec.decodeRoute(file(startedAtMillis).readBytes()) }.getOrDefault(DecodedRoute(emptyList(), false))
 
     fun delete(startedAtMillis: Long) {
         runCatching { file(startedAtMillis).delete() }
