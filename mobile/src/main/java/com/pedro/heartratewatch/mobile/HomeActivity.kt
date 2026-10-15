@@ -131,8 +131,10 @@ private fun HomeScreen() {
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val allStarts = runs.map { it.startedAtMillis } + workouts.map { it.startedAtMillis }
     LevelUpHost()
-    val standing = Progression.standing(rememberBreakdown(context).total)
-    val streak = streakDays(allStarts)
+    val breakdown = rememberBreakdown(context)
+    val standing = Progression.standing(breakdown.total)
+    // The streak counts only sessions that were a real effort (see Effort), with rest days carrying it over.
+    val streak = breakdown.streakDays
     // Re-arm the daily reminder alarm whenever the app opens (it's cleared if the app was force-stopped).
     // Right after a restore from a backup, the restored settings and stats go to the watch.
     LaunchedEffect(Unit) {
@@ -175,6 +177,7 @@ private fun HomeScreen() {
                 }
             }
             RankSummary(standing) { context.startActivity(Intent(context, RankActivity::class.java)) }
+            RestProgress(breakdown) { context.startActivity(Intent(context, RankActivity::class.java)) }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 HomeTile("Cardio", Icons.AutoMirrored.Outlined.DirectionsRun, Modifier.weight(1f)) {
                     context.startActivity(Intent(context, MainActivity::class.java))
