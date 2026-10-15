@@ -110,7 +110,7 @@ class PhoneTrackingService : Service() {
                 applicationContext,
                 maxSpeedMetersPerSecond = if (type == ActivityType.BIKE) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
                 else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND,
-                onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon) }
+                onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon, System.currentTimeMillis()) }
             ) { meters -> onDistance(session, meters) }.also { it.start() }
         } catch (e: SecurityException) {
             // Location permission missing: nothing to track.
