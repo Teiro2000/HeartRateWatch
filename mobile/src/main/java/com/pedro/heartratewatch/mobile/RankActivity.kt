@@ -112,47 +112,7 @@ internal fun LevelUpHost() {
         }
     }
 
-    showing?.let { (standing, rankUp) ->
-        val scale by animateFloatAsState(targetValue = 1f, animationSpec = spring(dampingRatio = 0.35f, stiffness = 200f), label = "pop")
-        AlertDialog(
-            onDismissRequest = { showing = null },
-            title = {
-                Text(
-                    if (rankUp) "Rank up!" else "Level up!",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = standing.rank.color,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "${standing.level}",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = standing.rank.color,
-                        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale }
-                    )
-                    Text("Level ${standing.level}", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (rankUp) "You are now ${standing.rank.name}!" else standing.rank.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = standing.rank.color
-                    )
-                    standing.nextRank?.let {
-                        Text(
-                            "${it.minLevel - standing.level} more to ${it.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showing = null }, modifier = Modifier.fillMaxWidth()) { Text("Nice") }
-            }
-        )
-    }
+    showing?.let { (standing, rankUp) -> LevelUpDialog(standing, rankUp) { showing = null } }
 }
 
 private fun Int.grouped(): String = NumberFormat.getIntegerInstance().format(this)
