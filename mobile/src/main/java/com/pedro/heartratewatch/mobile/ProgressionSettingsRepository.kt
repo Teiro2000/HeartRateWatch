@@ -19,7 +19,7 @@ private val Context.progressionSettingsDataStore by preferencesDataStore(name = 
  *  - [penaltiesFromFlow]: the first day a missed day can cost a level; set the first time levels are
  *    looked at (so a gap in old history costs nothing) and again whenever the level is reset.
  *  - [bonusXpFlow]: extra XP added by the Settings test button, so level-up moments can be tried.
- *  - [celebratedLevelFlow]: the level the last level-up moment was shown for (0 = nothing shown yet).
+ *  - [celebratedLevelFlow]: the level the last level-up moment was shown for (-1 = nothing shown yet).
  */
 class ProgressionSettingsRepository(private val context: Context) {
 
@@ -37,7 +37,7 @@ class ProgressionSettingsRepository(private val context: Context) {
 
     val bonusXpFlow: Flow<Int> = context.progressionSettingsDataStore.data.map { it[bonusKey] ?: 0 }
 
-    val celebratedLevelFlow: Flow<Int> = context.progressionSettingsDataStore.data.map { it[celebratedKey] ?: 0 }
+    val celebratedLevelFlow: Flow<Int> = context.progressionSettingsDataStore.data.map { it[celebratedKey] ?: -1 }
 
     /** Called when the level is first shown: from today on, a missed day costs a level. Does nothing once set. */
     suspend fun ensurePenaltiesStarted() {
