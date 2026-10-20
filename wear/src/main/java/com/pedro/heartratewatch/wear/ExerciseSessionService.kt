@@ -16,6 +16,7 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.pedro.heartratewatch.shared.ActivityType
+import com.pedro.heartratewatch.shared.BarometerSource
 import com.pedro.heartratewatch.shared.DataLayerPaths
 import com.pedro.heartratewatch.shared.LocationDistanceTracker
 import com.pedro.heartratewatch.shared.RoutePoint
@@ -102,6 +103,9 @@ class ExerciseSessionService : LifecycleService() {
 
     // GPS positions along the way (see LocationDistanceTracker.onPoint), sent with the summary so the phone can draw the route.
     private val routePoints = mutableListOf<RoutePoint>()
+    // Altitude for the route comes from the barometer when the watch has one (far steadier than GPS height), else from GPS.
+    private var barometer: BarometerSource? = null
+    private var baroPoints = 0
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var heartRateSource: HeartRateSensorSource? = null
@@ -171,6 +175,7 @@ class ExerciseSessionService : LifecycleService() {
         heartRateSource = null
         locationTracker?.stop()
         locationTracker = null
+        barometer?.stop()
         runBlocking {
             withTimeoutOrNull(5_000) {
                 sendStopAlertToPhone()
@@ -241,7 +246,10 @@ class ExerciseSessionService : LifecycleService() {
         val request = PutDataMapRequest.create("${DataLayerPaths.RUN_SUMMARY}/${summary.startedAtMillis}").apply {
             dataMap.putByteArray("summary", summary.toBytes())
             if (routePoints.size >= 2) {
-                dataMap.putByteArray("route", RouteCodec.encode(RouteCodec.downsample(routePoints)))
+                dataMap.putByteArray(
+                    "route",
+                    RouteCodec.encode(RouteCodec.downsample(routePoints), barometric = baroPoints > routePoints.size / 2)
+                )
             }
         }.asPutDataRequest().setUrgent()
         runCatching { Wearable.getDataClient(applicationContext).putDataItem(request).await() }
@@ -260,8 +268,13 @@ class ExerciseSessionService : LifecycleService() {
                     this,
                     maxSpeedMetersPerSecond = if (trackStops) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
                     else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND,
-                    onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon, System.currentTimeMillis()) }
+                    onPoint = { lat, lon, gpsAltitude ->
+                        val baro = barometer?.altitudeMeters
+                        if (baro != null) baroPoints++
+                        routePoints += RoutePoint(lat, lon, System.currentTimeMillis(), baro ?: gpsAltitude)
+                    }
                 ) { meters -> onSample(null, meters) }.also { it.start() }
+                barometer = BarometerSource(this).also { if (!it.start()) barometer = null }
             }
         } catch (e: SecurityException) {
             // A missing runtime permission would otherwise look like "I tapped Start and nothing

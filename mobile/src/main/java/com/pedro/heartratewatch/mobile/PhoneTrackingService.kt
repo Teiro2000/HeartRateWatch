@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.pedro.heartratewatch.shared.ActivityType
 import com.pedro.heartratewatch.shared.AlertType
+import com.pedro.heartratewatch.shared.BarometerSource
 import com.pedro.heartratewatch.shared.LocationDistanceTracker
 import com.pedro.heartratewatch.shared.RouteCodec
 import com.pedro.heartratewatch.shared.RoutePoint
@@ -44,6 +45,9 @@ class PhoneTrackingService : Service() {
     private lateinit var historyRepository: RunHistoryRepository
 
     private val routePoints = mutableListOf<RoutePoint>()
+    // Altitude for the route comes from the phone's barometer when it has one, else from GPS.
+    private var barometer: BarometerSource? = null
+    private var baroPoints = 0
     private var tracker: PhoneSessionTracker? = null
     private var location: LocationDistanceTracker? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -110,8 +114,13 @@ class PhoneTrackingService : Service() {
                 applicationContext,
                 maxSpeedMetersPerSecond = if (type == ActivityType.BIKE) LocationDistanceTracker.MAX_BIKE_SPEED_METERS_PER_SECOND
                 else LocationDistanceTracker.MAX_FOOT_SPEED_METERS_PER_SECOND,
-                onPoint = { lat, lon -> routePoints += RoutePoint(lat, lon, System.currentTimeMillis()) }
+                onPoint = { lat, lon, gpsAltitude ->
+                    val baro = barometer?.altitudeMeters
+                    if (baro != null) baroPoints++
+                    routePoints += RoutePoint(lat, lon, System.currentTimeMillis(), baro ?: gpsAltitude)
+                }
             ) { meters -> onDistance(session, meters) }.also { it.start() }
+            barometer = BarometerSource(applicationContext).also { if (!it.start()) barometer = null }
         } catch (e: SecurityException) {
             // Location permission missing: nothing to track.
             tracker = null
@@ -185,12 +194,16 @@ class PhoneTrackingService : Service() {
         tracker = null
         location?.stop()
         location = null
+        barometer?.stop()
+        barometer = null
         alertPlayer.stop()
         if (session != null) {
             val summary = session.summary(System.currentTimeMillis())
             // A start-and-immediately-stop isn't worth a history entry.
             if (summary.distanceMeters > 0f || summary.durationSeconds >= MIN_SAVED_SECONDS) {
-                val route = if (routePoints.size >= 2) RouteCodec.encode(RouteCodec.downsample(routePoints)) else null
+                val route = if (routePoints.size >= 2) {
+                    RouteCodec.encode(RouteCodec.downsample(routePoints), barometric = baroPoints > routePoints.size / 2)
+                } else null
                 CoroutineScope(Dispatchers.IO).launch { SessionIngest.ingest(applicationContext, summary, route) }
             }
         }

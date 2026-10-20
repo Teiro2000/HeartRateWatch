@@ -9,3 +9,7 @@
 .cxx
 local.properties
 */build
+
+# Personal exercise logs and import files: never commit
+exercise logs*.docx
+workout import*.xlsx
