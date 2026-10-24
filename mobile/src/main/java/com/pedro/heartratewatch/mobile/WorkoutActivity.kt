@@ -563,8 +563,8 @@ private fun ActiveWorkoutScreen(
     var showPicker by remember { mutableStateOf(false) }
     var confirmFinish by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
-    // Only one exercise is open at a time (an accordion); the first starts open.
-    var openId by rememberSaveable { mutableStateOf(workout.exercises.firstOrNull()?.id) }
+    // Only one exercise is open at a time (an accordion); they all start closed.
+    var openId by rememberSaveable { mutableStateOf<String?>(null) }
     // After a failed Finish, exercises with no data stay highlighted until they have some.
     var highlightEmpty by remember { mutableStateOf(false) }
     var emptyNames by remember { mutableStateOf<List<String>?>(null) }
