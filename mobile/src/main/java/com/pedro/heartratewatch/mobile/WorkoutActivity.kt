@@ -660,7 +660,6 @@ private fun ActiveWorkoutScreen(
             onPick = { picked ->
                 val added = ExerciseLog(WorkoutRepository.newId(), picked.id, picked.name)
                 onChange(workout.copy(exercises = workout.exercises + added))
-                openId = added.id
                 showPicker = false
             },
             onDismiss = { showPicker = false }
