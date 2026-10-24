@@ -474,6 +474,7 @@ private fun MenuScreen(
     lastWorkout: String
 ) {
     var confirmDiscard by remember { mutableStateOf(false) }
+    var confirmStartNew by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ScreenTitle("Pulse Guard")
         HorizontalDivider()
@@ -497,12 +498,21 @@ private fun MenuScreen(
                 }
             }
         }
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("Start Workout") }
+        // Starting another while one is in progress replaces it, so ask first.
+        Button(onClick = { if (active != null) confirmStartNew = true else onStart() }, modifier = Modifier.fillMaxWidth()) { Text("Start Workout") }
         MenuListRow("Templates", Icons.Outlined.ViewAgenda, onTemplates)
         MenuListRow("Exercises", Icons.AutoMirrored.Outlined.FormatListBulleted, onExercises)
         MenuListRow("Stats", Icons.AutoMirrored.Outlined.ShowChart, onProgress)
         MenuListRow("History", Icons.Outlined.History, onHistory)
         HorizontalDivider()
+    }
+    if (confirmStartNew) {
+        ConfirmDialog(
+            text = "You already have a workout in progress (${active?.templateName}). Starting a new one will discard it, and nothing from it will be saved.",
+            confirmLabel = "Start new",
+            onConfirm = { confirmStartNew = false; onStart() },
+            onDismiss = { confirmStartNew = false }
+        )
     }
     if (confirmDiscard) {
         ConfirmDialog(
