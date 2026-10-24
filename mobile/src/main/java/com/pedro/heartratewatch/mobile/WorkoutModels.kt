@@ -38,8 +38,13 @@ data class ExerciseLog(
     val exerciseName: String,
     val sets: List<LoggedSet> = emptyList(),
     val intensity: Intensity? = null,
-    val note: String = ""
-)
+    val note: String = "",
+    /** Ticked with the "Done" button during a workout, only to see at a glance what's finished. Never kept in history. */
+    val done: Boolean = false
+) {
+    /** Whether any set has a weight or reps typed in (a blank set doesn't count). */
+    val hasData: Boolean get() = sets.any { it.weight != null || it.reps != null }
+}
 
 /** A workout in progress (finishedAtMillis == null) or in history. */
 data class WorkoutLog(

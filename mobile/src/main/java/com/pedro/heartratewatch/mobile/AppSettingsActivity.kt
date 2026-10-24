@@ -215,25 +215,20 @@ private fun AppSettingsScreen(
             }
             HorizontalDivider()
             var soundsOpen by remember { mutableStateOf(false) }
-            val soundPickers = AlertType.entries.associateWith { rememberSoundPicker(it, alertPlayer) }
             AccordionSection(
-                "Custom sounds",
+                "Alert volume",
                 expanded = soundsOpen,
                 onToggle = { soundsOpen = !soundsOpen }
             ) {
                 Text(
-                    "The sounds your phone plays for cardio alerts: heart rate, pace and distance. They apply to every cardio activity.",
+                    "How loud your phone plays the cardio alerts (heart rate, pace and distance). Up to +12 dB boosts them past the normal volume.",
                     style = MaterialTheme.typography.bodySmall
                 )
-                AlertType.entries.forEach { type ->
-                    AlertSoundRow(
-                        label = type.soundPickerLabel(),
-                        initialDb = alertPlayer.volumeDb(type),
-                        onChoose = { soundPickers.getValue(type).launch(SUPPORTED_AUDIO_MIME_TYPES) },
-                        onTest = { alertPlayer.playNow(type) },
-                        onVolumeChange = { alertPlayer.setVolumeDb(type, it) }
-                    )
-                }
+                AlertVolumeControl(
+                    initialDb = alertPlayer.volumeDb(),
+                    onTest = { alertPlayer.playNow(AlertType.TARGET_REACHED) },
+                    onVolumeChange = { alertPlayer.setVolumeDb(it) }
+                )
             }
             // Backup: everything on this phone in one file, and back again.
             var backupMessage by remember { mutableStateOf<String?>(null) }
@@ -264,7 +259,7 @@ private fun AppSettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Backup")
                     Text(
-                        "All your history, settings and routes in one file. Custom alert sounds aren't included.",
+                        "All your history, settings and routes in one file.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
