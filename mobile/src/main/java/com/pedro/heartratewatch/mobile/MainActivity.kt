@@ -91,28 +91,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/**
- * MIME types offered to the document picker for a custom alert sound. The generic "audio"
- * wildcard MIME type alone should be enough in theory, but some OEM file-picker apps (Samsung's
- * included) list results by matching the exact MIME strings a caller passes rather than reliably
- * expanding the wildcard, so the common audio formats are spelled out explicitly to make sure
- * mp3/m4a/ogg/flac files actually show up, not just wav.
- */
-internal val SUPPORTED_AUDIO_MIME_TYPES = arrayOf(
-    "audio/*",
-    "audio/wav",
-    "audio/x-wav",
-    "audio/mpeg",
-    "audio/mp4",
-    "audio/aac",
-    "audio/ogg",
-    "audio/flac",
-    "audio/x-flac",
-    "audio/3gpp",
-    "audio/amr",
-    "audio/webm"
-)
-
 class MainActivity : ComponentActivity() {
 
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
@@ -425,7 +403,7 @@ internal fun CardioSettingsContent(
 /**
  * Collapsible group of settings. `expanded`/`onToggle` are owned by the caller rather than kept
  * internally, so SettingsScreen can enforce that only one of General/Heart rate/Pace/Target/
- * Custom sounds is ever open at once -- opening one closes whichever other one was open, instead
+ * Alert volume is ever open at once -- opening one closes whichever other one was open, instead
  * of them stacking up independently.
  */
 @Composable
@@ -460,33 +438,18 @@ internal fun AccordionSection(
     }
 }
 
-/** A document picker pre-wired to save whatever audio file the user picks as `type`'s alert sound. */
+/** The loudness of all alerts: one slider from quieter (-20 dB) to boosted (+12 dB), and a button to hear it. */
 @Composable
-internal fun rememberSoundPicker(type: AlertType, alertPlayer: AlertPlayer) =
-    rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri?.let { alertPlayer.setCustomSound(type, it) }
-    }
-
-/** One alert's controls: pick a sound, test it (at its current volume), and set its loudness. */
-@Composable
-internal fun AlertSoundRow(
-    label: String,
-    initialDb: Int,
-    onChoose: () -> Unit,
-    onTest: () -> Unit,
-    onVolumeChange: (Int) -> Unit
-) {
+internal fun AlertVolumeControl(initialDb: Int, onTest: () -> Unit, onVolumeChange: (Int) -> Unit) {
     var db by remember { mutableStateOf(initialDb) }
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onChoose) { Text("Choose sound") }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Volume: ${if (db > 0) "+" else ""}$db dB" + if (db == 0) " (default)" else "",
+                style = MaterialTheme.typography.titleSmall
+            )
             OutlinedButton(onClick = onTest) { Text("Test") }
         }
-        Text(
-            "Volume: ${if (db > 0) "+" else ""}$db dB" + if (db == 0) " (default)" else "",
-            style = MaterialTheme.typography.bodySmall
-        )
         Slider(
             value = db.toFloat(),
             onValueChange = {
@@ -497,17 +460,6 @@ internal fun AlertSoundRow(
             steps = AlertPlayer.MAX_VOLUME_DB - AlertPlayer.MIN_VOLUME_DB - 1
         )
     }
-}
-
-/** Button label for the "Custom sounds" picker list -- kept out of :shared since it's UI text,
- * not a model concern (same reasoning as ActivityType.displayName() on :wear). */
-internal fun AlertType.soundPickerLabel(): String = when (this) {
-    AlertType.LOW_HR -> "Push-harder alert (heart rate)"
-    AlertType.HIGH_HR -> "Break alert (heart rate)"
-    AlertType.PACE_TOO_SLOW -> "Push-harder alert (pace)"
-    AlertType.PACE_TOO_FAST -> "Ease-up alert (pace)"
-    AlertType.TARGET_REACHED -> "Target-reached alert"
-    AlertType.HALFWAY -> "Halfway-there alert"
 }
 
 /**

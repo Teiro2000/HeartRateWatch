@@ -38,6 +38,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".CalorieActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".RouteViewActivity"
             android:exported="false" />
 

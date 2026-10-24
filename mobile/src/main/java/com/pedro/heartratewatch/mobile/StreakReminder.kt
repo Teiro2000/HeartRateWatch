@@ -60,7 +60,7 @@ class StreakReminderRepository(private val context: Context) {
 /**
  * The daily "keep your streak going" reminder. An alarm goes off at the chosen time each day; the
  * receiver then checks the cardio and gym history and only posts the notification when a streak is
- * alive but nothing has been logged yet today (see [streakAtRisk]). The alarm is inexact (it can
+ * alive but today hasn't earned enough XP to count yet (the notification says how much is still needed). The alarm is inexact (it can
  * land a few minutes late while the phone is idle), which avoids needing the exact-alarm permission.
  */
 object StreakReminder {
@@ -94,7 +94,14 @@ object StreakReminder {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    internal fun notify(context: Context, streak: Int) {
+    /** What the reminder says: how much XP is still needed to complete today's streak. */
+    internal fun reminderText(todayXp: Int): String {
+        val needed = (Progression.STREAK_XP - todayXp).coerceAtLeast(1)
+        return if (todayXp > 0) "You need $needed more XP to complete today's streak ($todayXp of ${Progression.STREAK_XP} so far)."
+        else "You need $needed XP to complete today's streak."
+    }
+
+    internal fun notify(context: Context, streak: Int, todayXp: Int) {
         if (!canNotify(context)) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
@@ -108,7 +115,7 @@ object StreakReminder {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_streak)
             .setContentTitle("Keep your $days streak going")
-            .setContentText("You haven't logged a workout or cardio session today.")
+            .setContentText(reminderText(todayXp))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()
@@ -128,7 +135,7 @@ class StreakReminderReceiver : BroadcastReceiver() {
                 if (config.enabled && intent.action == ACTION_REMIND) {
                     // The same streak the main menu shows: only sessions that were a real effort count.
                     val progress = ProgressionInputs.breakdown(app)
-                    if (progress.streakDays > 0 && !progress.todayCounts) StreakReminder.notify(app, progress.streakDays)
+                    if (progress.streakDays > 0 && !progress.todayCounts) StreakReminder.notify(app, progress.streakDays, progress.todayXp)
                 }
                 StreakReminder.schedule(app, config)
             } finally {

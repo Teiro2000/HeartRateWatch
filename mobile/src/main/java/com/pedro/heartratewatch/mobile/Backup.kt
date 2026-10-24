@@ -18,8 +18,7 @@ import java.util.zip.ZipOutputStream
  * history, workouts, templates and exercises, settings, personal bests, level progress) and the saved
  * routes. It's a zip of the app's own data files, so a restore brings back exactly what was saved.
  *
- * Not included: custom alert sounds (they point at files on the phone that can't be carried over, so
- * choose them again) and the data kept on the watch.
+ * Not included: the alert volume (kept in a plain settings file, not the data files) and the data kept on the watch.
  */
 object Backup {
 

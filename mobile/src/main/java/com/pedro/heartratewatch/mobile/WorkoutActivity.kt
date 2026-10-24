@@ -27,7 +27,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -554,14 +563,23 @@ private fun ActiveWorkoutScreen(
     var showPicker by remember { mutableStateOf(false) }
     var confirmFinish by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    // Only one exercise is open at a time (an accordion); the first starts open.
+    var openId by rememberSaveable { mutableStateOf(workout.exercises.firstOrNull()?.id) }
+    // After a failed Finish, exercises with no data stay highlighted until they have some.
+    var highlightEmpty by remember { mutableStateOf(false) }
+    var emptyNames by remember { mutableStateOf<List<String>?>(null) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     fun update(id: String, transform: (ExerciseLog) -> ExerciseLog) {
         onChange(workout.copy(exercises = workout.exercises.map { if (it.id == id) transform(it) else it }))
     }
 
     val lastTemplateNote = remember(history, workout.templateId) { lastNoteForTemplate(history, workout.templateId) }
+    val itemsBeforeExercises = 1 + if (lastTemplateNote != null) 1 else 0
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -586,7 +604,10 @@ private fun ActiveWorkoutScreen(
             ExerciseCard(
                 log = log,
                 unit = unit,
+                expanded = openId == log.id,
+                missingData = highlightEmpty && !log.hasData,
                 lastTime = lastTimeFor(history, log.exerciseId),
+                onToggleOpen = { openId = if (openId == log.id) null else log.id },
                 onChange = { changed -> update(log.id) { changed } },
                 onRemove = { onChange(workout.copy(exercises = workout.exercises.filterNot { it.id == log.id })) }
             )
@@ -601,7 +622,22 @@ private fun ActiveWorkoutScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 24.dp)) {
-                Button(onClick = { confirmFinish = true }, modifier = Modifier.weight(1f)) { Text("Finish workout") }
+                Button(
+                    onClick = {
+                        val empty = workout.exercises.filterNot { it.hasData }
+                        if (empty.isEmpty()) {
+                            confirmFinish = true
+                        } else {
+                            // Nothing is saved until every exercise has data: show which ones are missing it.
+                            highlightEmpty = true
+                            emptyNames = empty.map { it.exerciseName }
+                            openId = empty.first().id
+                            val index = workout.exercises.indexOfFirst { it.id == empty.first().id }
+                            scope.launch { listState.animateScrollToItem(itemsBeforeExercises + index) }
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text("Finish workout") }
                 OutlinedButton(onClick = { confirmDiscard = true }) { Text("Discard") }
             }
         }
@@ -612,14 +648,25 @@ private fun ActiveWorkoutScreen(
             exercises = exercises,
             onCreate = onCreateExercise,
             onPick = { picked ->
-                onChange(
-                    workout.copy(
-                        exercises = workout.exercises + ExerciseLog(WorkoutRepository.newId(), picked.id, picked.name)
-                    )
-                )
+                val added = ExerciseLog(WorkoutRepository.newId(), picked.id, picked.name)
+                onChange(workout.copy(exercises = workout.exercises + added))
+                openId = added.id
                 showPicker = false
             },
             onDismiss = { showPicker = false }
+        )
+    }
+    emptyNames?.let { names ->
+        AlertDialog(
+            onDismissRequest = { emptyNames = null },
+            title = { Text("No data entered") },
+            text = {
+                Text(
+                    "Data wasn't entered for " + names.joinToString(", ") +
+                        ". Add a set with weight or reps to each one (or remove it) before finishing the workout."
+                )
+            },
+            confirmButton = { TextButton(onClick = { emptyNames = null }) { Text("OK") } }
         )
     }
     if (confirmFinish) {
@@ -644,17 +691,78 @@ private fun ActiveWorkoutScreen(
 private fun ExerciseCard(
     log: ExerciseLog,
     unit: WeightUnit,
+    expanded: Boolean,
+    missingData: Boolean,
+    lastTime: Pair<WorkoutLog, ExerciseLog>?,
+    onToggleOpen: () -> Unit,
+    onChange: (ExerciseLog) -> Unit,
+    onRemove: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        border = if (missingData) BorderStroke(2.dp, MaterialTheme.colorScheme.error) else CardDefaults.outlinedCardBorder()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The header is always showing; tapping it opens or closes the exercise.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggleOpen).padding(vertical = 12.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(log.exerciseName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
+                        if (log.done) {
+                            Icon(
+                                Icons.Filled.Check,
+                                contentDescription = "Done",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    when {
+                        missingData -> Text("No data entered", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        !expanded && log.hasData -> Text(
+                            WorkoutText.summarize(log.sets, unit),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Close" else "Open",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExerciseCardBody(log, unit, missingData, lastTime, onChange, onRemove)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseCardBody(
+    log: ExerciseLog,
+    unit: WeightUnit,
+    missingData: Boolean,
     lastTime: Pair<WorkoutLog, ExerciseLog>?,
     onChange: (ExerciseLog) -> Unit,
     onRemove: () -> Unit
 ) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(log.exerciseName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = onRemove) { Text("Remove") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (missingData) {
+                Text(
+                    "Data wasn't entered for this exercise. Add a set with weight or reps, or remove it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
-
             if (lastTime != null) {
                 val (workout, previous) = lastTime
                 Column {
@@ -708,6 +816,20 @@ private fun ExerciseCard(
             IntensityPicker(selected = log.intensity, onSelect = { onChange(log.copy(intensity = it)) })
 
             NoteField(log.note, "Notes") { onChange(log.copy(note = it)) }
+
+            // Only a marker for this session ("I've finished this one"); it isn't kept in the workout's history.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                if (log.done) {
+                    OutlinedButton(onClick = { onChange(log.copy(done = false)) }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Done (tap to undo)")
+                    }
+                } else {
+                    Button(onClick = { onChange(log.copy(done = true)) }, modifier = Modifier.weight(1f)) { Text("Mark as done") }
+                }
+                TextButton(onClick = onRemove) { Text("Remove") }
+            }
         }
     }
 }

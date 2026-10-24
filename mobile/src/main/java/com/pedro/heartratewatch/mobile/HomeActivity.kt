@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -185,6 +186,14 @@ private fun HomeScreen() {
                 HomeTile("Workout", Icons.Outlined.FitnessCenter, Modifier.weight(1f)) {
                     context.startActivity(Intent(context, WorkoutActivity::class.java))
                 }
+            }
+            OutlinedButton(
+                onClick = { context.startActivity(Intent(context, CalorieActivity::class.java)) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.Restaurant, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Calories")
             }
             OutlinedButton(
                 onClick = { context.startActivity(Intent(context, WeeklyRecapActivity::class.java)) },

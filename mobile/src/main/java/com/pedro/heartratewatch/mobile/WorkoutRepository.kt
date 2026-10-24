@@ -123,7 +123,10 @@ class WorkoutRepository(private val context: Context) {
     /** Moves the in-progress workout into history. */
     suspend fun finish(workout: WorkoutLog) {
         context.workoutDataStore.edit { prefs ->
-            val finished = workout.copy(finishedAtMillis = System.currentTimeMillis())
+            val finished = workout.copy(
+                finishedAtMillis = System.currentTimeMillis(),
+                exercises = workout.exercises.map { it.copy(done = false) }
+            )
             val current = prefs[Keys.HISTORY]?.let(::parseWorkouts).orEmpty()
             prefs[Keys.HISTORY] = workoutsToJson(current + finished)
             prefs.remove(Keys.ACTIVE)
@@ -216,6 +219,7 @@ class WorkoutRepository(private val context: Context) {
                         .put("exerciseName", e.exerciseName)
                         .put("intensity", e.intensity?.name ?: JSONObject.NULL)
                         .put("note", e.note)
+                        .apply { if (e.done) put("done", true) }
                         .put("sets", JSONArray().also { sets ->
                             e.sets.forEach { s ->
                                 sets.put(
@@ -250,6 +254,7 @@ class WorkoutRepository(private val context: Context) {
                         runCatching { Intensity.valueOf(e.getString("intensity")) }.getOrNull()
                     },
                     note = e.optString("note", ""),
+                    done = e.optBoolean("done", false),
                     sets = (0 until sets.length()).map { j ->
                         val s = sets.getJSONObject(j)
                         LoggedSet(
