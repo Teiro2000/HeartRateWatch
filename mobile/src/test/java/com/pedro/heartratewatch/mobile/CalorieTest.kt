@@ -10,8 +10,8 @@ class CalorieTest {
     private val oats = Food("f1", "Oats", calories = 150.0, proteinG = 5.0, carbsG = 27.0, fatG = 3.0)
 
     @Test
-    fun anEntryIsTheServingsTimesTheFood() {
-        val entry = FoodEntry.of("e1", oats, 1.5, epochDay = 100, loggedAtMillis = 0)
+    fun anEntryScalesTheFoodsPer100gNumbersByTheWeightEaten() {
+        val entry = FoodEntry.of("e1", oats, 150.0, epochDay = 100, loggedAtMillis = 0)
         assertEquals(225.0, entry.calories, 0.001)
         assertEquals(7.5, entry.proteinG, 0.001)
         assertEquals(40.5, entry.carbsG, 0.001)
@@ -21,9 +21,9 @@ class CalorieTest {
     @Test
     fun aDayAddsUpOnlyItsOwnEntries() {
         val entries = listOf(
-            FoodEntry.of("a", oats, 1.0, 100, 1),
-            FoodEntry.of("b", oats, 2.0, 100, 2),
-            FoodEntry.of("c", oats, 1.0, 101, 3)
+            FoodEntry.of("a", oats, 100.0, 100, 1),
+            FoodEntry.of("b", oats, 200.0, 100, 2),
+            FoodEntry.of("c", oats, 100.0, 101, 3)
         )
         assertEquals(450.0, dayTotals(entries, 100).calories, 0.001)
         assertEquals(15.0, dayTotals(entries, 100).proteinG, 0.001)

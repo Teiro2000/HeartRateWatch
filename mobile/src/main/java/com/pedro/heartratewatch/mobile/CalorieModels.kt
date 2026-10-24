@@ -1,8 +1,8 @@
 package com.pedro.heartratewatch.mobile
 
 /**
- * A food as saved in "My foods", with its numbers for ONE serving (so scanning a nutrition label later fills in
- * exactly this). Protein, carbs and fat are in grams; they can be 0 when only the calories are known.
+ * A food as saved in "My foods", with its numbers per 100 g (the way nutrition labels list them, so scanning one
+ * later fills in exactly this). Protein, carbs and fat are in grams; they can be 0 when only the calories are known.
  */
 data class Food(
     val id: String,
@@ -14,15 +14,16 @@ data class Food(
 )
 
 /**
- * Something eaten on one day. The numbers are the totals for what was eaten ([servings] times the food's per-serving
- * numbers, worked out when it was logged), so changing or deleting the saved food never rewrites the past.
+ * Something eaten on one day. The numbers are the totals for what was eaten ([grams] of the food, worked out from its
+ * per-100 g numbers when it was logged), so changing or deleting the saved food never rewrites the past.
  */
 data class FoodEntry(
     val id: String,
     /** The day it was eaten, as [java.time.LocalDate.toEpochDay]. */
     val epochDay: Long,
     val name: String,
-    val servings: Double,
+    /** The weight eaten, in grams. */
+    val grams: Double,
     val calories: Double,
     val proteinG: Double,
     val carbsG: Double,
@@ -30,17 +31,20 @@ data class FoodEntry(
     val loggedAtMillis: Long
 ) {
     companion object {
-        fun of(id: String, food: Food, servings: Double, epochDay: Long, loggedAtMillis: Long) = FoodEntry(
-            id = id,
-            epochDay = epochDay,
-            name = food.name,
-            servings = servings,
-            calories = food.calories * servings,
-            proteinG = food.proteinG * servings,
-            carbsG = food.carbsG * servings,
-            fatG = food.fatG * servings,
-            loggedAtMillis = loggedAtMillis
-        )
+        fun of(id: String, food: Food, grams: Double, epochDay: Long, loggedAtMillis: Long): FoodEntry {
+            val per = grams / 100.0
+            return FoodEntry(
+                id = id,
+                epochDay = epochDay,
+                name = food.name,
+                grams = grams,
+                calories = food.calories * per,
+                proteinG = food.proteinG * per,
+                carbsG = food.carbsG * per,
+                fatG = food.fatG * per,
+                loggedAtMillis = loggedAtMillis
+            )
+        }
     }
 }
 

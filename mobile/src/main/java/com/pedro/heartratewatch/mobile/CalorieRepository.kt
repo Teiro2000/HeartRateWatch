@@ -41,12 +41,12 @@ class CalorieRepository(private val context: Context) {
         context.calorieDataStore.edit { if (calories == null || calories <= 0) it.remove(Keys.GOAL) else it[Keys.GOAL] = calories }
     }
 
-    /** Logs [servings] of [food] on [epochDay], and keeps the food in "My foods" (updating it if the name is already there). */
-    suspend fun log(food: Food, servings: Double, epochDay: Long) {
+    /** Logs [grams] of [food] on [epochDay], and keeps the food in "My foods" (updating it if the name is already there). */
+    suspend fun log(food: Food, grams: Double, epochDay: Long) {
         context.calorieDataStore.edit { prefs ->
             val entries = prefs[Keys.ENTRIES]?.let(::parseEntries).orEmpty()
             prefs[Keys.ENTRIES] = entriesToJson(
-                entries + FoodEntry.of(newId(), food, servings, epochDay, System.currentTimeMillis())
+                entries + FoodEntry.of(newId(), food, grams, epochDay, System.currentTimeMillis())
             )
             val foods = prefs[Keys.FOODS]?.let(::parseFoods).orEmpty()
             val others = foods.filterNot { it.name.equals(food.name, ignoreCase = true) }
@@ -72,7 +72,7 @@ class CalorieRepository(private val context: Context) {
     private fun entriesToJson(list: List<FoodEntry>): String = JSONArray().also { arr ->
         list.forEach { e ->
             arr.put(
-                JSONObject().put("id", e.id).put("day", e.epochDay).put("name", e.name).put("servings", e.servings)
+                JSONObject().put("id", e.id).put("day", e.epochDay).put("name", e.name).put("grams", e.grams)
                     .put("kcal", e.calories).put("protein", e.proteinG).put("carbs", e.carbsG).put("fat", e.fatG)
                     .put("at", e.loggedAtMillis)
             )
@@ -86,7 +86,7 @@ class CalorieRepository(private val context: Context) {
                 id = o.getString("id"),
                 epochDay = o.getLong("day"),
                 name = o.getString("name"),
-                servings = o.optDouble("servings", 1.0),
+                grams = o.optDouble("grams", 0.0),
                 calories = o.optDouble("kcal", 0.0),
                 proteinG = o.optDouble("protein", 0.0),
                 carbsG = o.optDouble("carbs", 0.0),
