@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -205,12 +206,17 @@ private fun AddFoodDialog(
     val scope = rememberCoroutineScope()
     var scanStatus by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    // The scanned photo with boxes over where each number was read, to check them against.
+    var scan by remember { mutableStateOf<LabelScan?>(null) }
+    var showBigPreview by remember { mutableStateOf(false) }
     fun readPhoto(photo: Uri) {
         scanning = true
         scanStatus = "Reading the label..."
         scope.launch {
-            val scanned = LabelScanner.scan(context, photo)
+            val result = LabelScanner.scan(context, photo)
+            val scanned = result?.label
             scanning = false
+            scan = result?.takeIf { it.label.foundAnything }
             if (scanned == null || !scanned.foundAnything) {
                 scanStatus = "Couldn't read a nutrition label in that photo. Try again with the label flat, in good light, filling the picture."
             } else {
@@ -247,6 +253,8 @@ private fun AddFoodDialog(
     val valid = name.isNotBlank() && kcal != null && serving != null && serving > 0 && amount != null && amount > 0
     val numberOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
 
+    scan?.let { current -> if (showBigPreview) LabelPreviewScreen(current) { showBigPreview = false } }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add food") },
@@ -266,6 +274,15 @@ private fun AddFoodDialog(
                     OutlinedButton(enabled = !scanning, onClick = { pickPhoto.launch("image/*") }) { Text("Choose photo") }
                 }
                 scanStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                scan?.let { current ->
+                    // Where on the photo each number was read, so a wrong one is easy to spot.
+                    LabelPreview(
+                        current,
+                        modifier = Modifier.fillMaxWidth().height(200.dp).clickable { showBigPreview = true }
+                    )
+                    LabelLegend(current)
+                    TextButton(onClick = { showBigPreview = true }) { Text("Enlarge photo") }
+                }
                 if (foods.isNotEmpty()) {
                     Text("My foods (tap to fill in)", style = MaterialTheme.typography.labelLarge)
                     foods.take(8).forEach { food ->

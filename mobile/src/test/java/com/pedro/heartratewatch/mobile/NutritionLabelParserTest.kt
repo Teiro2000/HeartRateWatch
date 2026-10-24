@@ -75,6 +75,28 @@ class NutritionLabelParserTest {
     }
 
     @Test
+    fun saysWhichRowEachNumberCameFrom() {
+        val parsed = NutritionLabelParser.parseDetailed(label)
+        assertEquals(label.indexOf("Calories 230"), parsed.rowOf[LabelField.CALORIES])
+        assertEquals(label.indexOf("Total Fat 8g 10%"), parsed.rowOf[LabelField.FAT])
+        assertEquals(label.indexOf("Total Carbohydrate 37g 13%"), parsed.rowOf[LabelField.CARBS])
+        assertEquals(label.indexOf("Protein 3g"), parsed.rowOf[LabelField.PROTEIN])
+        assertEquals(label.indexOf("Serving size 2/3 cup (55g)"), parsed.rowOf[LabelField.SERVING])
+    }
+
+    @Test
+    fun rowBoxesCoverEveryPieceOfTheRow() {
+        val rows = NutritionLabelParser.rowBoxes(
+            listOf(
+                OcrLine("Calories", left = 20, top = 275, bottom = 315, right = 200),
+                OcrLine("230", left = 500, top = 270, bottom = 320, right = 620)
+            )
+        )
+        assertEquals(1, rows.size)
+        assertEquals(LabelRow("Calories 230", left = 20, top = 270, right = 620, bottom = 320), rows[0])
+    }
+
+    @Test
     fun theSaturatedAndFibreRowsAreNotTakenForTheTotals() {
         // even if text recognition returns the sub-rows before the totals
         val scanned = NutritionLabelParser.parse(
