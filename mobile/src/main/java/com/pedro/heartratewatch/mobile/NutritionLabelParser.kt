@@ -19,7 +19,8 @@ data class ScannedLabel(
 }
 
 /**
- * Turns the text read from a photo of a (US-style) Nutrition Facts label into numbers. Text recognition returns pieces
+ * Turns the text read from a photo of a US or Canadian Nutrition Facts label into numbers (the Canadian one is
+ * bilingual: "Fat / Lipides 15 g", "Per 1 3/4 cups (100 g)"). Text recognition returns pieces
  * of text, not rows -- a label's big "Calories" and its "230" often come back as separate pieces -- so [rows] first puts
  * pieces that sit side by side back into one row, then [parse] looks for each nutrient in the rows. Pure, so it can be tested.
  */
@@ -49,9 +50,14 @@ object NutritionLabelParser {
 
     private const val NUMBER = """(\d+(?:[.,]\d+)?)"""
     private val calories = Regex("""calories\s*[:\-]?\s*$NUMBER(?!\s*(?:g\b|mg\b|%))""")
-    private val protein = Regex("""protein\s*[:\-]?\s*<?\s*$NUMBER\s*g\b""")
-    private val carbs = Regex("""total\s*carb\w*\.?\s*[:\-]?\s*<?\s*$NUMBER\s*g\b""")
-    private val fat = Regex("""total\s*fat\s*[:\-]?\s*<?\s*$NUMBER\s*g\b""")
+    // Labels from other countries give the energy as "1046 kJ / 250 kcal" instead.
+    private val kcal = Regex("""$NUMBER\s*kcal\b""")
+    // The nutrient's name (in English or French) then, within a few characters, its amount in grams.
+    private val protein = Regex("""\bprotein\D{0,16}?<?\s*$NUMBER\s*g\b""")
+    private val carbs = Regex("""\b(?:carbohydrate|carbs?\b|glucides)\D{0,16}?<?\s*$NUMBER\s*g\b""")
+    private val fat = Regex("""\b(?:fat|lipides)\b\D{0,16}?<?\s*$NUMBER\s*g\b""")
+    // The sub-rows under fat and carbohydrate must not be taken for the total.
+    private val subRow = Regex("""saturated|satur[ée]s?|trans|poly|mono|sugar|sucres|fib(?:er|re)|starch|amidon""")
     private val servingBracket = Regex("""\(\s*$NUMBER\s*g\s*\)""")
     private val servingPlain = Regex("""$NUMBER\s*g\b""")
 
@@ -64,18 +70,22 @@ object NutritionLabelParser {
     fun parse(rows: List<String>): ScannedLabel {
         val cleaned = rows.map(::clean)
         fun first(regex: Regex): Double? = cleaned.firstNotNullOfOrNull { regex.find(it)?.let(::number) }
+        fun firstTotal(regex: Regex): Double? =
+            cleaned.filterNot { subRow.containsMatchIn(it) }.firstNotNullOfOrNull { regex.find(it)?.let(::number) }
 
-        // "Serving size 2/3 cup (55g)": the weight in the bracket; failing that a plain "30g" on the serving size row.
+        // "Serving size 2/3 cup (55g)" (US) or "Per 1 3/4 cups (100 g)" (Canada): the weight in the bracket; failing
+        // that a plain "30g" on a "serving size" row.
         val servingRow = cleaned.firstOrNull { it.contains("serving size") || it.contains("serv. size") }
-        val servingGrams = servingRow?.let { row ->
+        val perRow = cleaned.firstOrNull { row -> Regex("""^(?:per|pour)\s""").containsMatchIn(row) && servingBracket.containsMatchIn(row) }
+        val servingGrams = (servingRow ?: perRow)?.let { row ->
             servingBracket.find(row)?.let(::number) ?: servingPlain.find(row)?.let(::number)
         }
 
         return ScannedLabel(
-            calories = first(calories),
+            calories = first(calories) ?: first(kcal),
             proteinG = first(protein),
-            carbsG = first(carbs),
-            fatG = first(fat),
+            carbsG = firstTotal(carbs),
+            fatG = firstTotal(fat),
             servingGrams = servingGrams?.takeIf { it > 0 }
         )
     }
