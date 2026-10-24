@@ -64,6 +64,9 @@ dependencies {
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
+    // Reads the numbers off a photographed nutrition label, on the phone itself.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     implementation("androidx.datastore:datastore-preferences:1.1.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
 

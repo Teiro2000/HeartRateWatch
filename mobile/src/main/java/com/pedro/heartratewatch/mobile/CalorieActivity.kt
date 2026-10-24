@@ -1,8 +1,12 @@
 package com.pedro.heartratewatch.mobile
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -195,6 +200,47 @@ private fun AddFoodDialog(
     var weight by remember { mutableStateOf("") }
     var savedId by remember { mutableStateOf<String?>(null) }
 
+    // Scanning a photo of a nutrition label fills in the numbers (reading happens on the phone).
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var scanStatus by remember { mutableStateOf<String?>(null) }
+    var scanning by remember { mutableStateOf(false) }
+    fun readPhoto(photo: Uri) {
+        scanning = true
+        scanStatus = "Reading the label..."
+        scope.launch {
+            val scanned = LabelScanner.scan(context, photo)
+            scanning = false
+            if (scanned == null || !scanned.foundAnything) {
+                scanStatus = "Couldn't read a nutrition label in that photo. Try again with the label flat, in good light, filling the picture."
+            } else {
+                scanned.calories?.let { calories = formatAmount(it) }
+                scanned.proteinG?.let { protein = formatAmount(it) }
+                scanned.carbsG?.let { carbs = formatAmount(it) }
+                scanned.fatG?.let { fat = formatAmount(it) }
+                scanned.servingGrams?.let { servingSize = formatAmount(it) }
+                savedId = null
+                val missing = buildList {
+                    if (scanned.calories == null) add("calories")
+                    if (scanned.proteinG == null) add("protein")
+                    if (scanned.carbsG == null) add("carbs")
+                    if (scanned.fatG == null) add("fat")
+                    if (scanned.servingGrams == null) add("serving weight")
+                }
+                scanStatus = "Filled in from the label. Check the numbers" +
+                    (if (missing.isEmpty()) "." else ", and fill in: ${missing.joinToString(", ")}.")
+            }
+        }
+    }
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        val photo = photoUri
+        if (saved && photo != null) readPhoto(photo)
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { picked ->
+        if (picked != null) readPhoto(picked)
+    }
+
     val kcal = calories.toDoubleOrNull()
     val amount = weight.toDoubleOrNull()
     val serving = servingSize.toDoubleOrNull()
@@ -206,6 +252,20 @@ private fun AddFoodDialog(
         title = { Text("Add food") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Scan a nutrition label", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = !scanning,
+                        onClick = {
+                            val file = File(context.cacheDir, "label_photos").also { it.mkdirs() }.let { File(it, "label.jpg") }
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                            photoUri = uri
+                            takePhoto.launch(uri)
+                        }
+                    ) { Text("Take photo") }
+                    OutlinedButton(enabled = !scanning, onClick = { pickPhoto.launch("image/*") }) { Text("Choose photo") }
+                }
+                scanStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (foods.isNotEmpty()) {
                     Text("My foods (tap to fill in)", style = MaterialTheme.typography.labelLarge)
                     foods.take(8).forEach { food ->
