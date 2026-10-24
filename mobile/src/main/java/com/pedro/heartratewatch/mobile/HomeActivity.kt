@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
@@ -42,7 +41,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.DateFormat
 import java.util.Date
@@ -188,13 +190,21 @@ private fun HomeScreen() {
                     context.startActivity(Intent(context, WorkoutActivity::class.java))
                 }
             }
-            OutlinedButton(
-                onClick = { context.startActivity(Intent(context, CalorieActivity::class.java)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            // Full width but only as tall as makes its area equal to one Cardio / Workout tile.
+            OutlinedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .sameAreaAsHalfWidthSquare(gap = 16.dp)
+                    .clickable { context.startActivity(Intent(context, CalorieActivity::class.java)) }
             ) {
-                Icon(Icons.Outlined.Restaurant, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Calories")
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                    Text("Calories", style = MaterialTheme.typography.titleLarge)
+                }
             }
             OutlinedButton(
                 onClick = { context.startActivity(Intent(context, WeeklyRecapActivity::class.java)) },
@@ -214,6 +224,18 @@ private fun HomeScreen() {
             }
         }
     }
+}
+
+/**
+ * Sizes a full-width box so its area equals that of one of two square tiles side by side (each half the width, less half
+ * the [gap] between them) -- that is, the Cardio / Workout tiles above it.
+ */
+private fun Modifier.sameAreaAsHalfWidthSquare(gap: Dp): Modifier = layout { measurable, constraints ->
+    val width = constraints.maxWidth
+    val side = (width - gap.roundToPx()) / 2f
+    val height = (side * side / width).roundToInt()
+    val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
 }
 
 @Composable
