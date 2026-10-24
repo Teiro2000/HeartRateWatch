@@ -19,6 +19,16 @@ class CalorieTest {
     }
 
     @Test
+    fun theWeightEatenIsComparedWithTheServingWeight() {
+        // a 30 g serving has 150 kcal and 5 g protein; eating 45 g is one and a half servings
+        val granola = Food("g", "Granola", calories = 150.0, proteinG = 5.0, servingGrams = 30.0)
+        val entry = FoodEntry.of("e", granola, 45.0, 100, 0)
+        assertEquals(225.0, entry.calories, 0.001)
+        assertEquals(7.5, entry.proteinG, 0.001)
+        assertEquals(45.0, entry.grams, 0.001)
+    }
+
+    @Test
     fun aDayAddsUpOnlyItsOwnEntries() {
         val entries = listOf(
             FoodEntry.of("a", oats, 100.0, 100, 1),

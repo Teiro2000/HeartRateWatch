@@ -101,6 +101,7 @@ class CalorieRepository(private val context: Context) {
             arr.put(
                 JSONObject().put("id", f.id).put("name", f.name).put("kcal", f.calories)
                     .put("protein", f.proteinG).put("carbs", f.carbsG).put("fat", f.fatG)
+                    .put("serving", f.servingGrams)
             )
         }
     }.toString()
@@ -114,7 +115,8 @@ class CalorieRepository(private val context: Context) {
                 calories = o.optDouble("kcal", 0.0),
                 proteinG = o.optDouble("protein", 0.0),
                 carbsG = o.optDouble("carbs", 0.0),
-                fatG = o.optDouble("fat", 0.0)
+                fatG = o.optDouble("fat", 0.0),
+                servingGrams = o.optDouble("serving", 100.0).takeIf { it > 0 } ?: 100.0
             )
         }
     }

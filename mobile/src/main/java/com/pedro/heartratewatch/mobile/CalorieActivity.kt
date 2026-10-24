@@ -176,8 +176,8 @@ private fun CalorieScreen() {
 }
 
 /**
- * Adds something eaten. Type a food's numbers per 100 g (calories are required, the rest optional) and the weight
- * eaten in grams, or tap a saved food to fill it in. The food is saved for next time.
+ * Adds something eaten. Type a food's numbers for one serving (calories are required, the rest optional) and what a
+ * serving weighs, then the weight actually eaten, or tap a saved food to fill it in. The food is saved for next time.
  */
 @Composable
 private fun AddFoodDialog(
@@ -191,12 +191,14 @@ private fun AddFoodDialog(
     var protein by remember { mutableStateOf("") }
     var carbs by remember { mutableStateOf("") }
     var fat by remember { mutableStateOf("") }
+    var servingSize by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
     var savedId by remember { mutableStateOf<String?>(null) }
 
     val kcal = calories.toDoubleOrNull()
     val amount = weight.toDoubleOrNull()
-    val valid = name.isNotBlank() && kcal != null && amount != null && amount > 0
+    val serving = servingSize.toDoubleOrNull()
+    val valid = name.isNotBlank() && kcal != null && serving != null && serving > 0 && amount != null && amount > 0
     val numberOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
 
     AlertDialog(
@@ -209,7 +211,7 @@ private fun AddFoodDialog(
                     foods.take(8).forEach { food ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                "${food.name}  ·  ${formatAmount(food.calories)} kcal",
+                                "${food.name}  ·  ${formatAmount(food.calories)} kcal per ${formatAmount(food.servingGrams)} g",
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f).clickable {
                                     name = food.name
@@ -217,6 +219,7 @@ private fun AddFoodDialog(
                                     protein = if (food.proteinG > 0) formatAmount(food.proteinG) else ""
                                     carbs = if (food.carbsG > 0) formatAmount(food.carbsG) else ""
                                     fat = if (food.fatG > 0) formatAmount(food.fatG) else ""
+                                    servingSize = formatAmount(food.servingGrams)
                                     savedId = food.id
                                 }.padding(vertical = 6.dp)
                             )
@@ -225,15 +228,16 @@ private fun AddFoodDialog(
                     }
                 }
                 OutlinedTextField(value = name, onValueChange = { name = it; savedId = null }, label = { Text("Food") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text("Per 100 g", style = MaterialTheme.typography.labelLarge)
+                Text("One serving", style = MaterialTheme.typography.labelLarge)
                 OutlinedTextField(value = calories, onValueChange = { calories = decimalOnly(it) }, label = { Text("Calories (kcal)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = protein, onValueChange = { protein = decimalOnly(it) }, label = { Text("Protein g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                     OutlinedTextField(value = carbs, onValueChange = { carbs = decimalOnly(it) }, label = { Text("Carbs g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                     OutlinedTextField(value = fat, onValueChange = { fat = decimalOnly(it) }, label = { Text("Fat g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                 }
+                OutlinedTextField(value = servingSize, onValueChange = { servingSize = decimalOnly(it) }, label = { Text("A serving weighs (g)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = weight, onValueChange = { weight = decimalOnly(it) }, label = { Text("Weight eaten (g)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.fillMaxWidth())
-                if (valid) Text("Total: ${formatAmount(kcal!! * amount!! / 100.0)} kcal", style = MaterialTheme.typography.titleSmall)
+                if (valid) Text("Total: ${formatAmount(kcal!! * amount!! / serving!!)} kcal", style = MaterialTheme.typography.titleSmall)
             }
         },
         confirmButton = {
@@ -246,7 +250,8 @@ private fun AddFoodDialog(
                         calories = kcal!!,
                         proteinG = protein.toDoubleOrNull() ?: 0.0,
                         carbsG = carbs.toDoubleOrNull() ?: 0.0,
-                        fatG = fat.toDoubleOrNull() ?: 0.0
+                        fatG = fat.toDoubleOrNull() ?: 0.0,
+                        servingGrams = serving!!
                     )
                     onAdd(food, amount!!)
                 }

@@ -1,8 +1,9 @@
 package com.pedro.heartratewatch.mobile
 
 /**
- * A food as saved in "My foods", with its numbers per 100 g (the way nutrition labels list them, so scanning one
- * later fills in exactly this). Protein, carbs and fat are in grams; they can be 0 when only the calories are known.
+ * A food as saved in "My foods", with its numbers for ONE serving and how much that serving weighs (the way a
+ * nutrition label gives them, so scanning one later fills in exactly this). Protein, carbs and fat are in grams; they
+ * can be 0 when only the calories are known.
  */
 data class Food(
     val id: String,
@@ -10,12 +11,14 @@ data class Food(
     val calories: Double,
     val proteinG: Double = 0.0,
     val carbsG: Double = 0.0,
-    val fatG: Double = 0.0
+    val fatG: Double = 0.0,
+    /** What one serving weighs, in grams. */
+    val servingGrams: Double = 100.0
 )
 
 /**
  * Something eaten on one day. The numbers are the totals for what was eaten ([grams] of the food, worked out from its
- * per-100 g numbers when it was logged), so changing or deleting the saved food never rewrites the past.
+ * per-serving numbers and serving weight when it was logged), so changing or deleting the saved food never rewrites the past.
  */
 data class FoodEntry(
     val id: String,
@@ -32,7 +35,7 @@ data class FoodEntry(
 ) {
     companion object {
         fun of(id: String, food: Food, grams: Double, epochDay: Long, loggedAtMillis: Long): FoodEntry {
-            val per = grams / 100.0
+            val per = grams / food.servingGrams
             return FoodEntry(
                 id = id,
                 epochDay = epochDay,
