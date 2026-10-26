@@ -25,6 +25,8 @@ class CalorieRepository(private val context: Context) {
         val ENTRIES = stringPreferencesKey("entries")
         val FOODS = stringPreferencesKey("foods")
         val GOAL = intPreferencesKey("goal")
+        val WEIGH_INS = stringPreferencesKey("weigh_ins")
+        val PLAN = stringPreferencesKey("weight_plan")
     }
 
     val entriesFlow: Flow<List<FoodEntry>> = context.calorieDataStore.data.map { prefs ->
@@ -38,6 +40,76 @@ class CalorieRepository(private val context: Context) {
 
     /** The daily calorie goal, or null when none is set. */
     val goalFlow: Flow<Int?> = context.calorieDataStore.data.map { prefs -> prefs[Keys.GOAL]?.takeIf { it > 0 } }
+
+    /** Weigh-ins, oldest first. */
+    val weighInsFlow: Flow<List<WeighIn>> = context.calorieDataStore.data.map { prefs ->
+        prefs[Keys.WEIGH_INS]?.let(::parseWeighIns).orEmpty()
+    }
+
+    val planFlow: Flow<WeightPlan?> = context.calorieDataStore.data.map { prefs -> prefs[Keys.PLAN]?.let(::parsePlan) }
+
+    /** Records a weight (kg) for [epochDay], replacing one already there. */
+    suspend fun addWeighIn(epochDay: Long, kg: Double) {
+        context.calorieDataStore.edit { prefs ->
+            val all = prefs[Keys.WEIGH_INS]?.let(::parseWeighIns).orEmpty().filterNot { it.epochDay == epochDay }
+            prefs[Keys.WEIGH_INS] = weighInsToJson((all + WeighIn(epochDay, kg)).sortedBy { it.epochDay })
+        }
+    }
+
+    suspend fun deleteWeighIn(epochDay: Long) {
+        context.calorieDataStore.edit { prefs ->
+            val all = prefs[Keys.WEIGH_INS]?.let(::parseWeighIns).orEmpty()
+            prefs[Keys.WEIGH_INS] = weighInsToJson(all.filterNot { it.epochDay == epochDay })
+        }
+    }
+
+    /** Saves the weight goal. A new plan starts learning today; editing keeps what it has learned so far. */
+    suspend fun savePlan(plan: WeightPlan) {
+        context.calorieDataStore.edit { prefs ->
+            val existing = prefs[Keys.PLAN]?.let(::parsePlan)
+            prefs[Keys.PLAN] = planToJson(if (existing != null) plan.copy(estimateStartDay = existing.estimateStartDay) else plan)
+        }
+    }
+
+    /** Throws away what the estimate learned (after a long break, or a big change in routine) and starts it over from today. */
+    suspend fun resetEstimate(today: Long) {
+        context.calorieDataStore.edit { prefs ->
+            prefs[Keys.PLAN]?.let(::parsePlan)?.let { prefs[Keys.PLAN] = planToJson(it.copy(estimateStartDay = today)) }
+        }
+    }
+
+    suspend fun clearPlan() {
+        context.calorieDataStore.edit { it.remove(Keys.PLAN) }
+    }
+
+    private fun weighInsToJson(list: List<WeighIn>): String = JSONArray().also { arr ->
+        list.forEach { arr.put(JSONObject().put("day", it.epochDay).put("kg", it.kg)) }
+    }.toString()
+
+    private fun parseWeighIns(json: String): List<WeighIn> = JSONArray(json).let { arr ->
+        (0 until arr.length()).map { i -> arr.getJSONObject(i).let { WeighIn(it.getLong("day"), it.getDouble("kg")) } }
+    }
+
+    private fun planToJson(p: WeightPlan): String = JSONObject()
+        .put("target", p.targetKg).put("pace", p.pace.name).put("start", p.estimateStartDay)
+        .also { o ->
+            p.scaleBmr?.let { o.put("bmr", it) }
+            p.heightCm?.let { o.put("height", it) }
+            p.age?.let { o.put("age", it) }
+            p.sex?.let { o.put("sex", it.name) }
+        }.toString()
+
+    private fun parsePlan(json: String): WeightPlan = JSONObject(json).let { o ->
+        WeightPlan(
+            targetKg = o.getDouble("target"),
+            pace = Pace.entries.firstOrNull { it.name == o.optString("pace") } ?: Pace.STEADY,
+            estimateStartDay = o.optLong("start", 0L),
+            scaleBmr = o.optDouble("bmr").takeIf { !it.isNaN() },
+            heightCm = o.optDouble("height").takeIf { !it.isNaN() },
+            age = if (o.has("age")) o.getInt("age") else null,
+            sex = Sex.entries.firstOrNull { it.name == o.optString("sex") }
+        )
+    }
 
     suspend fun setGoal(calories: Int?) {
         context.calorieDataStore.edit { if (calories == null || calories <= 0) it.remove(Keys.GOAL) else it[Keys.GOAL] = calories }

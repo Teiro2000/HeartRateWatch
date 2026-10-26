@@ -123,10 +123,7 @@ object Progression {
         val cardio = counted.sumOf { cardioXp(it) }
         val workoutTotal = countedWorkouts.sumOf { workoutXp(it) }
 
-        fun dayOf(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
-        val dayXp = HashMap<java.time.LocalDate, Int>()
-        counted.forEach { dayXp.merge(dayOf(it.startedAtMillis), cardioXp(it), Int::plus) }
-        countedWorkouts.forEach { dayXp.merge(dayOf(it.startedAtMillis), workoutXp(it), Int::plus) }
+        val dayXp = dailyXp(counted, countedWorkouts, zone)
         val todayXp = dayXp[today] ?: 0
         if (dayXp.isEmpty()) return Breakdown(cardio, workoutTotal, 0, todayXp = todayXp)
 
@@ -185,6 +182,19 @@ object Progression {
             streakDays = streakRun, restDaysUsed = restUsed, restCredits = credits, nextRestOn = nextRest,
             todayXp = todayXp, todayCounts = todayXp >= STREAK_XP
         )
+    }
+
+    /** The XP earned on each day, cardio and workouts together (what the streak is judged on). */
+    fun dailyXp(
+        runs: List<RunSummary>,
+        workouts: List<WorkoutLog>,
+        zone: ZoneId = ZoneId.systemDefault()
+    ): Map<java.time.LocalDate, Int> {
+        fun dayOf(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+        val dayXp = HashMap<java.time.LocalDate, Int>()
+        runs.forEach { dayXp.merge(dayOf(it.startedAtMillis), cardioXp(it), Int::plus) }
+        workouts.forEach { dayXp.merge(dayOf(it.startedAtMillis), workoutXp(it), Int::plus) }
+        return dayXp
     }
 
     /** XP in a day (cardio and workouts together) that keeps the streak going. */

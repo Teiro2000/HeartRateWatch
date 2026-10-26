@@ -2,6 +2,7 @@ package com.pedro.heartratewatch.mobile
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,6 +59,120 @@ class CalorieTest {
         assertEquals("120", formatAmount(120.0))
         assertEquals("12.5", formatAmount(12.5))
         assertEquals("225", formatAmount(224.96))
+    }
+
+    private val today = 1000L
+    private val plan = WeightPlan(targetKg = 70.0, pace = Pace.STEADY, estimateStartDay = 0L, scaleBmr = 1700.0)
+
+    /** A day's worth of food. */
+    private fun ate(day: Long, kcal: Double) = FoodEntry("e$day", day, "Food", 100.0, ServingUnit.GRAMS, kcal, 0.0, 0.0, 0.0, 0L)
+
+    @Test
+    fun withNoDataTheGoalIsAGuessFromTheBmrAndRecentXp() {
+        // 2100 XP in the last 7 days: 1700 x 1.2 + 2100 x 1.1 / 7 = 2370 kcal to maintain; 0.25 kg a week off is 275 kcal a day
+        val xp = (today - 7 until today).associateWith { 300 }
+        val result = CalorieTargets.compute(plan, listOf(WeighIn(today, 80.0)), emptyList(), xp, today)!!
+        assertEquals(EstimateSource.STARTING_GUESS, result.source)
+        assertEquals(2370.0, result.maintenance, 0.5)
+        assertEquals(2095, result.goal)
+        assertEquals(-275.0, result.dailyChange, 0.5)
+    }
+
+    @Test
+    fun noExerciseLowersTheStartingGuess() {
+        val result = CalorieTargets.compute(plan, listOf(WeighIn(today, 80.0)), emptyList(), emptyMap(), today)!!
+        assertEquals(2040.0, result.maintenance, 0.5)
+    }
+
+    @Test
+    fun theGoalIsNeverBelowTheBmrOrTheMinimum() {
+        val small = plan.copy(scaleBmr = 1500.0, pace = Pace.FAST)
+        val result = CalorieTargets.compute(small, listOf(WeighIn(today, 80.0)), emptyList(), emptyMap(), today)!!
+        // maintenance 1800, minus 550 would be 1250, but the goal stays at the BMR
+        assertEquals(1500, result.goal)
+        assertTrue(result.flooredAtMinimum)
+    }
+
+    @Test
+    fun atTheTargetWeightTheGoalIsMaintenance() {
+        val result = CalorieTargets.compute(plan, listOf(WeighIn(today, 70.1)), emptyList(), emptyMap(), today)!!
+        assertEquals(0.0, result.dailyChange, 0.001)
+        assertEquals(result.maintenance.toInt(), result.goal)
+    }
+
+    @Test
+    fun aTargetAboveTheCurrentWeightAddsCalories() {
+        val result = CalorieTargets.compute(plan, listOf(WeighIn(today, 65.0)), emptyList(), emptyMap(), today)!!
+        assertTrue(result.dailyChange > 0)
+    }
+
+    @Test
+    fun measuredMaintenanceIsWhatWasEatenPlusWhatTheWeightLoss() {
+        // 28 days at 2000 kcal while weight fell 0.1 kg a day: burn = 2000 + 0.1 x 7700 = 2770 kcal
+        val weighIns = (today - 28..today).map { WeighIn(it, 80.0 - 0.1 * (it - (today - 28))) }
+        val entries = (today - 28 until today).map { ate(it, 2000.0) }
+        val xp = (today - 28 until today).associateWith { 300 }
+        val result = CalorieTargets.compute(plan, weighIns, entries, xp, today)!!
+        assertEquals(EstimateSource.MEASURED, result.source)
+        assertEquals(2770.0, result.maintenance, 5.0)
+    }
+
+    @Test
+    fun exercisingLessThanUsualLowersAMeasuredGoal() {
+        val weighIns = (today - 27..today).map { WeighIn(it, 80.0) }
+        val entries = (today - 28 until today).map { ate(it, 2400.0) }
+        val usual = (today - 28 until today).associateWith { 300 }
+        val restWeek = usual + (today - 7 until today).associateWith { 0 }
+        val steady = CalorieTargets.compute(plan, weighIns, entries, usual, today)!!
+        val rested = CalorieTargets.compute(plan, weighIns, entries, restWeek, today)!!
+        assertTrue(rested.maintenance < steady.maintenance - 200)
+    }
+
+    @Test
+    fun fewDaysOfDataStillGiveTheStartingGuess() {
+        val weighIns = (today - 5..today).map { WeighIn(it, 80.0) }
+        val entries = (today - 5 until today).map { ate(it, 2000.0) }
+        assertEquals(EstimateSource.STARTING_GUESS, CalorieTargets.compute(plan, weighIns, entries, emptyMap(), today)!!.source)
+    }
+
+    @Test
+    fun resettingTheEstimateIgnoresEarlierData() {
+        val weighIns = (today - 27..today).map { WeighIn(it, 80.0) }
+        val entries = (today - 28 until today).map { ate(it, 2400.0) }
+        val reset = plan.copy(estimateStartDay = today - 2)
+        assertEquals(EstimateSource.STARTING_GUESS, CalorieTargets.compute(reset, weighIns, entries, emptyMap(), today)!!.source)
+    }
+
+    @Test
+    fun theBmrCanBeWorkedOutFromHeightAgeAndSex() {
+        // Mifflin-St Jeor: 10 x 80 + 6.25 x 180 - 5 x 30 + 5 = 1780
+        val profile = WeightPlan(70.0, Pace.STEADY, 0L, heightCm = 180.0, age = 30, sex = Sex.MALE)
+        assertEquals(1780.0, profile.bmr(80.0)!!, 0.001)
+        assertEquals(1614.0, profile.copy(sex = Sex.FEMALE).bmr(80.0)!!, 0.001)
+        assertNull(profile.bmr(null))
+        assertNull(CalorieTargets.compute(profile, emptyList(), emptyList(), emptyMap(), today))
+        assertEquals(1780.0, CalorieTargets.compute(profile, listOf(WeighIn(today, 80.0)), emptyList(), emptyMap(), today)!!.bmr, 0.001)
+    }
+
+    @Test
+    fun theScaleBmrWinsOverTheFormula() {
+        val both = WeightPlan(70.0, Pace.STEADY, 0L, scaleBmr = 1900.0, heightCm = 180.0, age = 30, sex = Sex.MALE)
+        assertEquals(1900.0, both.bmr(80.0)!!, 0.001)
+    }
+
+    @Test
+    fun weightUnitsConvertBothWays() {
+        assertEquals(176.37, WeightUnit.LB.fromKg(80.0), 0.01)
+        assertEquals(80.0, WeightUnit.LB.toKg(WeightUnit.LB.fromKg(80.0)), 0.0001)
+        assertEquals(70.87, WeightUnit.LB.fromCm(180.0), 0.01)
+        assertEquals(180.0, WeightUnit.KG.fromCm(180.0), 0.0001)
+    }
+
+    @Test
+    fun theWeightTrendAveragesTheLastWeek() {
+        val ins = listOf(WeighIn(today - 20, 90.0), WeighIn(today - 2, 80.0), WeighIn(today, 82.0))
+        assertEquals(81.0, CalorieTargets.trendKg(ins, today)!!, 0.001)
+        assertEquals(90.0, CalorieTargets.trendKg(listOf(WeighIn(today - 20, 90.0)), today)!!, 0.001)
     }
 
     @Test

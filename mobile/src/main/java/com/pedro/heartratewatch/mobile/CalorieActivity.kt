@@ -95,7 +95,10 @@ private fun CalorieScreen() {
     val scope = rememberCoroutineScope()
     val entries by repository.entriesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val foods by repository.foodsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-    val goal by repository.goalFlow.collectAsStateWithLifecycle(initialValue = null)
+    val manualGoal by repository.goalFlow.collectAsStateWithLifecycle(initialValue = null)
+    // With a weight plan the goal is worked out from it; otherwise it's the number typed in.
+    val target = rememberCalorieTarget(repository)
+    val goal = target?.goal ?: manualGoal
     val back = rememberSystemBack()
 
     val today = remember { LocalDate.now() }
@@ -157,7 +160,14 @@ private fun CalorieScreen() {
                             Text("Carbs ${formatAmount(totals.carbsG)} g", style = MaterialTheme.typography.bodyMedium)
                             Text("Fat ${formatAmount(totals.fatG)} g", style = MaterialTheme.typography.bodyMedium)
                         }
-                        TextButton(onClick = { editingGoal = true }) { Text(if (goal != null) "Change daily goal" else "Set a daily goal") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (target == null) {
+                                TextButton(onClick = { editingGoal = true }) { Text(if (manualGoal != null) "Change daily goal" else "Set a daily goal") }
+                            }
+                            TextButton(onClick = { WeightPlanActivity.open(context) }) {
+                                Text(if (target != null) "Weight plan (goal from it)" else "Weight plan")
+                            }
+                        }
                     }
                 }
             }
@@ -245,7 +255,7 @@ private fun CalorieScreen() {
     }
     if (editingGoal) {
         GoalDialog(
-            current = goal,
+            current = manualGoal,
             onSave = { scope.launch { repository.setGoal(it) }; editingGoal = false },
             onDismiss = { editingGoal = false }
         )
@@ -363,6 +373,9 @@ private fun AmountEatenDialog(food: Food, onLog: (Double) -> Unit, onDismiss: ()
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (food.unit == ServingUnit.MILLILITRES) {
+                    Text("Weighed it on a scale? Type the grams: 1 g counts as 1 mL.", style = MaterialTheme.typography.bodySmall)
+                }
                 if (valid) Text("Total: ${formatAmount(food.calories * amount!! / food.servingAmount)} kcal", style = MaterialTheme.typography.titleSmall)
             }
         },
