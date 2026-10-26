@@ -1,5 +1,6 @@
 package com.pedro.heartratewatch.mobile
 
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -7,48 +8,69 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pedro.heartratewatch.mobile.theme.PipBoyTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-/** A simple food diary: what was eaten each day, with calories and macros added up. No XP, just for keeping track. */
+/**
+ * A simple food diary: what was eaten each day, with calories and macros added up, and a database of foods ("My
+ * foods", each with the photo of its label) to log from. No XP, just for keeping track.
+ */
 class CalorieActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +83,9 @@ private fun decimalOnly(text: String): String {
     val firstDot = filtered.indexOf('.')
     return if (firstDot < 0) filtered else filtered.substring(0, firstDot + 1) + filtered.substring(firstDot + 1).replace(".", "")
 }
+
+/** The food editor is open for [food], or for a new food when it is null. */
+private class EditorTarget(val food: Food?)
 
 @Composable
 private fun CalorieScreen() {
@@ -75,7 +100,11 @@ private fun CalorieScreen() {
 
     val today = remember { LocalDate.now() }
     var day by remember { mutableStateOf(today) }
-    var adding by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+    var browsing by remember { mutableStateOf(false) }
+    var eating by remember { mutableStateOf<Food?>(null) }
+    var editor by remember { mutableStateOf<EditorTarget?>(null) }
+    var deleting by remember { mutableStateOf<Food?>(null) }
     var editingGoal by remember { mutableStateOf(false) }
 
     val totals = remember(entries, day) { dayTotals(entries, day.toEpochDay()) }
@@ -133,7 +162,10 @@ private fun CalorieScreen() {
                 }
             }
             item {
-                Button(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) { Text("+ Add food") }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { picking = true }, modifier = Modifier.weight(1f)) { Text("+ Log food") }
+                    OutlinedButton(onClick = { browsing = true }, modifier = Modifier.weight(1f)) { Text("My foods") }
+                }
             }
             if (dayEntries.isEmpty()) {
                 item { Text("Nothing logged for this day.", style = MaterialTheme.typography.bodyMedium) }
@@ -147,7 +179,7 @@ private fun CalorieScreen() {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(entry.name, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                "${formatAmount(entry.grams)} g  ·  " +
+                                "${formatQuantity(entry.amount, entry.unit)}  ·  " +
                                     "P ${formatAmount(entry.proteinG)}  C ${formatAmount(entry.carbsG)}  F ${formatAmount(entry.fatG)} g",
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -161,15 +193,54 @@ private fun CalorieScreen() {
         }
     }
 
-    if (adding) {
-        AddFoodDialog(
+    if (picking) {
+        LogFoodDialog(
             foods = foods,
-            onDelete = { scope.launch { repository.deleteFood(it.id) } },
-            onAdd = { food, grams ->
-                scope.launch { repository.log(food, grams, day.toEpochDay()) }
-                adding = false
+            onPick = { picking = false; eating = it },
+            onNewFood = { picking = false; editor = EditorTarget(null) },
+            onDismiss = { picking = false }
+        )
+    }
+    if (browsing) {
+        MyFoodsScreen(
+            foods = foods,
+            onAdd = { editor = EditorTarget(null) },
+            onEdit = { editor = EditorTarget(it) },
+            onDelete = { deleting = it },
+            onClose = { browsing = false }
+        )
+    }
+    eating?.let { food ->
+        AmountEatenDialog(
+            food = food,
+            onLog = { amount ->
+                scope.launch { repository.log(food, amount, day.toEpochDay()) }
+                eating = null
             },
-            onDismiss = { adding = false }
+            onDismiss = { eating = null }
+        )
+    }
+    editor?.let { target ->
+        FoodEditorDialog(
+            initial = target.food,
+            onSave = { food, photo, eaten ->
+                scope.launch {
+                    val saved = repository.saveFood(food, photo)
+                    if (eaten != null) repository.log(saved, eaten, day.toEpochDay())
+                }
+                editor = null
+            },
+            onDismiss = { editor = null }
+        )
+    }
+    deleting?.let { food ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            text = { Text("Remove ${food.name} from My foods? What you already logged stays.") },
+            confirmButton = {
+                TextButton(onClick = { scope.launch { repository.deleteFood(food.id) }; deleting = null }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } }
         )
     }
     if (editingGoal) {
@@ -181,34 +252,159 @@ private fun CalorieScreen() {
     }
 }
 
+/** The small photo a food was entered from, or a plain plate icon when it has none. */
+@Composable
+private fun FoodThumbnail(food: Food, size: Dp = 48.dp) {
+    val context = LocalContext.current
+    val image by produceState<ImageBitmap?>(null, food.id, food.photoAt) {
+        value = if (food.hasPhoto) withContext(Dispatchers.IO) { FoodPhotos.load(context, food.id, 240)?.asImageBitmap() } else null
+    }
+    val shape = MaterialTheme.shapes.small
+    Box(
+        modifier = Modifier.size(size).clip(shape).border(1.dp, MaterialTheme.colorScheme.outline, shape),
+        contentAlignment = Alignment.Center
+    ) {
+        val shown = image
+        if (shown != null) {
+            Image(shown, contentDescription = "Photo of the label", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(Icons.Outlined.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(size / 2))
+        }
+    }
+}
+
+@Composable
+private fun FoodRow(food: Food, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxWidth()) {
+        FoodThumbnail(food)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(food.name, style = MaterialTheme.typography.titleSmall)
+            Text(
+                "${formatAmount(food.calories)} kcal per ${formatQuantity(food.servingAmount, food.unit)}",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        trailing()
+    }
+}
+
+/** Pick a food from the database to log; what was eaten is asked next. */
+@Composable
+private fun LogFoodDialog(foods: List<Food>, onPick: (Food) -> Unit, onNewFood: () -> Unit, onDismiss: () -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val shown = remember(foods, query) { foods.filter { it.name.contains(query.trim(), ignoreCase = true) } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log food") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (foods.isEmpty()) {
+                    Text("No saved foods yet. Add one with New food; it's kept here for next time.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Search my foods") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    if (shown.isEmpty()) Text("No food matches that.", style = MaterialTheme.typography.bodyMedium)
+                    shown.forEach { food -> FoodRow(food, modifier = Modifier.clickable { onPick(food) }.padding(vertical = 6.dp)) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onNewFood) { Text("New food") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** The whole food database: add a food without logging it, edit one, or remove one. */
+@Composable
+private fun MyFoodsScreen(foods: List<Food>, onAdd: () -> Unit, onEdit: (Food) -> Unit, onDelete: (Food) -> Unit, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("My foods", style = MaterialTheme.typography.titleLarge)
+                    TextButton(onClick = onClose) { Text("Close") }
+                }
+                Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) { Text("+ Add food") }
+                Text("Foods you add are saved here with their label photo, so you only scan a label once. Tap one to edit it.", style = MaterialTheme.typography.bodySmall)
+                if (foods.isEmpty()) Text("Nothing saved yet.", style = MaterialTheme.typography.bodyMedium)
+                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(foods, key = { it.id }) { food ->
+                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                            FoodRow(
+                                food,
+                                modifier = Modifier.clickable { onEdit(food) }.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)
+                            ) { TextButton(onClick = { onDelete(food) }) { Text("X") } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** How much of [food] was eaten, in the unit its serving is measured in. */
+@Composable
+private fun AmountEatenDialog(food: Food, onLog: (Double) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val amount = text.toDoubleOrNull()
+    val valid = amount != null && amount > 0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(food.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "${formatAmount(food.calories)} kcal per ${formatQuantity(food.servingAmount, food.unit)}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = decimalOnly(it) },
+                    label = { Text("Amount eaten (${food.unit.label})") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (valid) Text("Total: ${formatAmount(food.calories * amount!! / food.servingAmount)} kcal", style = MaterialTheme.typography.titleSmall)
+            }
+        },
+        confirmButton = { TextButton(enabled = valid, onClick = { onLog(amount!!) }) { Text("Log") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 /**
- * Adds something eaten. Type a food's numbers for one serving (calories are required, the rest optional) and what a
- * serving weighs, then the weight actually eaten, or tap a saved food to fill it in. The food is saved for next time.
+ * Adds a food to the database (or edits one): type its numbers for one serving (calories are required, the rest
+ * optional) and how big a serving is, in grams or millilitres, or scan the label to fill them in; the photo is kept with
+ * the food. What was eaten is optional: leave it blank to only save the food, or fill it in to log it as well.
  */
 @Composable
-private fun AddFoodDialog(
-    foods: List<Food>,
-    onDelete: (Food) -> Unit,
-    onAdd: (Food, Double) -> Unit,
+private fun FoodEditorDialog(
+    initial: Food?,
+    onSave: (food: Food, photo: Bitmap?, eaten: Double?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var calories by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var servingSize by remember { mutableStateOf("") }
-    var weight by remember { mutableStateOf("") }
-    var savedId by remember { mutableStateOf<String?>(null) }
+    var name by remember { mutableStateOf(initial?.name.orEmpty()) }
+    var calories by remember { mutableStateOf(initial?.let { formatAmount(it.calories) }.orEmpty()) }
+    var protein by remember { mutableStateOf(initial?.takeIf { it.proteinG > 0 }?.let { formatAmount(it.proteinG) }.orEmpty()) }
+    var carbs by remember { mutableStateOf(initial?.takeIf { it.carbsG > 0 }?.let { formatAmount(it.carbsG) }.orEmpty()) }
+    var fat by remember { mutableStateOf(initial?.takeIf { it.fatG > 0 }?.let { formatAmount(it.fatG) }.orEmpty()) }
+    var servingSize by remember { mutableStateOf(initial?.let { formatAmount(it.servingAmount) }.orEmpty()) }
+    var unit by remember { mutableStateOf(initial?.unit ?: ServingUnit.GRAMS) }
+    var eaten by remember { mutableStateOf("") }
 
     // Scanning a photo of a nutrition label fills in the numbers (reading happens on the phone).
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var scanStatus by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
-    // The scanned photo with boxes over where each number was read, to check them against.
+    // The scanned photo with boxes over where each number was read, to check them against. It is what gets saved.
     var scan by remember { mutableStateOf<LabelScan?>(null) }
     var showBigPreview by remember { mutableStateOf(false) }
+    // The photo already saved with this food, shown until a new one is scanned.
+    val savedPhoto by produceState<Bitmap?>(null, initial?.id, initial?.photoAt) {
+        value = if (initial?.hasPhoto == true) withContext(Dispatchers.IO) { FoodPhotos.load(context, initial.id) } else null
+    }
+    var showSavedPhoto by remember { mutableStateOf(false) }
+
     fun readPhoto(photo: Uri) {
         scanning = true
         scanStatus = "Reading the label..."
@@ -224,14 +420,13 @@ private fun AddFoodDialog(
                 scanned.proteinG?.let { protein = formatAmount(it) }
                 scanned.carbsG?.let { carbs = formatAmount(it) }
                 scanned.fatG?.let { fat = formatAmount(it) }
-                scanned.servingGrams?.let { servingSize = formatAmount(it) }
-                savedId = null
+                scanned.servingAmount?.let { servingSize = formatAmount(it); unit = scanned.servingUnit }
                 val missing = buildList {
                     if (scanned.calories == null) add("calories")
                     if (scanned.proteinG == null) add("protein")
                     if (scanned.carbsG == null) add("carbs")
                     if (scanned.fatG == null) add("fat")
-                    if (scanned.servingGrams == null) add("serving weight")
+                    if (scanned.servingAmount == null) add("serving size")
                 }
                 scanStatus = "Filled in from the label. Check the numbers" +
                     (if (missing.isEmpty()) "." else ", and fill in: ${missing.joinToString(", ")}.")
@@ -248,16 +443,18 @@ private fun AddFoodDialog(
     }
 
     val kcal = calories.toDoubleOrNull()
-    val amount = weight.toDoubleOrNull()
     val serving = servingSize.toDoubleOrNull()
-    val valid = name.isNotBlank() && kcal != null && serving != null && serving > 0 && amount != null && amount > 0
+    val amount = eaten.toDoubleOrNull()
+    val eatenOk = eaten.isBlank() || (amount != null && amount > 0)
+    val valid = name.isNotBlank() && kcal != null && serving != null && serving > 0 && eatenOk
     val numberOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
 
     scan?.let { current -> if (showBigPreview) LabelPreviewScreen(current) { showBigPreview = false } }
+    savedPhoto?.let { photo -> if (showSavedPhoto) PhotoViewer(photo) { showSavedPhoto = false } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add food") },
+        title = { Text(if (initial == null) "Add food" else "Edit food") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Scan a nutrition label", style = MaterialTheme.typography.labelLarge)
@@ -274,7 +471,8 @@ private fun AddFoodDialog(
                     OutlinedButton(enabled = !scanning, onClick = { pickPhoto.launch("image/*") }) { Text("Choose photo") }
                 }
                 scanStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                scan?.let { current ->
+                val current = scan
+                if (current != null) {
                     // Where on the photo each number was read, so a wrong one is easy to spot.
                     LabelPreview(
                         current,
@@ -282,29 +480,19 @@ private fun AddFoodDialog(
                     )
                     LabelLegend(current)
                     TextButton(onClick = { showBigPreview = true }) { Text("Enlarge photo") }
-                }
-                if (foods.isNotEmpty()) {
-                    Text("My foods (tap to fill in)", style = MaterialTheme.typography.labelLarge)
-                    foods.take(8).forEach { food ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                "${food.name}  ·  ${formatAmount(food.calories)} kcal per ${formatAmount(food.servingGrams)} g",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f).clickable {
-                                    name = food.name
-                                    calories = formatAmount(food.calories)
-                                    protein = if (food.proteinG > 0) formatAmount(food.proteinG) else ""
-                                    carbs = if (food.carbsG > 0) formatAmount(food.carbsG) else ""
-                                    fat = if (food.fatG > 0) formatAmount(food.fatG) else ""
-                                    servingSize = formatAmount(food.servingGrams)
-                                    savedId = food.id
-                                }.padding(vertical = 6.dp)
-                            )
-                            TextButton(onClick = { onDelete(food) }) { Text("X") }
-                        }
+                    Text("This photo is saved with the food.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    savedPhoto?.let { photo ->
+                        Image(
+                            photo.asImageBitmap(),
+                            contentDescription = "Saved photo of the label",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxWidth().height(160.dp).clickable { showSavedPhoto = true }
+                        )
+                        Text("Saved photo (tap to enlarge). Scan again to replace it.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                OutlinedTextField(value = name, onValueChange = { name = it; savedId = null }, label = { Text("Food") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Food") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Text("One serving", style = MaterialTheme.typography.labelLarge)
                 OutlinedTextField(value = calories, onValueChange = { calories = decimalOnly(it) }, label = { Text("Calories (kcal)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -312,9 +500,30 @@ private fun AddFoodDialog(
                     OutlinedTextField(value = carbs, onValueChange = { carbs = decimalOnly(it) }, label = { Text("Carbs g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                     OutlinedTextField(value = fat, onValueChange = { fat = decimalOnly(it) }, label = { Text("Fat g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                 }
-                OutlinedTextField(value = servingSize, onValueChange = { servingSize = decimalOnly(it) }, label = { Text("A serving weighs (g)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = weight, onValueChange = { weight = decimalOnly(it) }, label = { Text("Weight eaten (g)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.fillMaxWidth())
-                if (valid) Text("Total: ${formatAmount(kcal!! * amount!! / serving!!)} kcal", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = servingSize,
+                        onValueChange = { servingSize = decimalOnly(it) },
+                        label = { Text("A serving is (${unit.label})") },
+                        singleLine = true,
+                        keyboardOptions = numberOptions,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ServingUnit.entries.forEach { option ->
+                        if (option == unit) Button(onClick = {}) { Text(option.label) }
+                        else OutlinedButton(onClick = { unit = option }) { Text(option.label) }
+                    }
+                }
+                Text("Eaten right now? (optional)", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = eaten,
+                    onValueChange = { eaten = decimalOnly(it) },
+                    label = { Text("Amount eaten (${unit.label})") },
+                    singleLine = true,
+                    keyboardOptions = numberOptions,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (valid && amount != null) Text("Total: ${formatAmount(kcal!! * amount / serving!!)} kcal", style = MaterialTheme.typography.titleSmall)
             }
         },
         confirmButton = {
@@ -322,17 +531,19 @@ private fun AddFoodDialog(
                 enabled = valid,
                 onClick = {
                     val food = Food(
-                        id = savedId ?: CalorieRepository.newId(),
+                        id = initial?.id ?: CalorieRepository.newId(),
                         name = name.trim().capitalizedWords(),
                         calories = kcal!!,
                         proteinG = protein.toDoubleOrNull() ?: 0.0,
                         carbsG = carbs.toDoubleOrNull() ?: 0.0,
                         fatG = fat.toDoubleOrNull() ?: 0.0,
-                        servingGrams = serving!!
+                        servingAmount = serving!!,
+                        unit = unit,
+                        photoAt = initial?.photoAt ?: 0L
                     )
-                    onAdd(food, amount!!)
+                    onSave(food, scan?.photo, amount)
                 }
-            ) { Text("Add") }
+            ) { Text(if (amount != null) "Save and log" else "Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )

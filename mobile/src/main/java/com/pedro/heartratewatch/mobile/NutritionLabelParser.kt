@@ -15,7 +15,7 @@ enum class LabelField(val label: String) {
     PROTEIN("Protein"),
     CARBS("Carbs"),
     FAT("Fat"),
-    SERVING("Serving weight")
+    SERVING("Serving size")
 }
 
 /** What could be read off a Nutrition Facts label: all numbers are for one serving; null where the label wasn't read. */
@@ -24,10 +24,11 @@ data class ScannedLabel(
     val proteinG: Double?,
     val carbsG: Double?,
     val fatG: Double?,
-    /** What one serving weighs in grams, from the bracket in "Serving size 2/3 cup (55g)". */
-    val servingGrams: Double?
+    /** How much one serving is, from the bracket in "Serving size 2/3 cup (55g)" or "Per 1 cup (250 mL)", in [servingUnit]. */
+    val servingAmount: Double?,
+    val servingUnit: ServingUnit = ServingUnit.GRAMS
 ) {
-    val foundAnything: Boolean get() = listOf(calories, proteinG, carbsG, fatG, servingGrams).any { it != null }
+    val foundAnything: Boolean get() = listOf(calories, proteinG, carbsG, fatG, servingAmount).any { it != null }
 }
 
 /** A scanned label together with which row (index into the rows given to the parser) each number was read from. */
@@ -84,8 +85,12 @@ object NutritionLabelParser {
     private val fat = Regex("""\b(?:fat|lipides)\b\D{0,16}?<?\s*$NUMBER\s*g\b""")
     // The sub-rows under fat and carbohydrate must not be taken for the total.
     private val subRow = Regex("""saturated|satur[ée]s?|trans|poly|mono|sugar|sucres|fib(?:er|re)|starch|amidon""")
-    private val servingBracket = Regex("""\(\s*$NUMBER\s*g\s*\)""")
-    private val servingPlain = Regex("""$NUMBER\s*g\b""")
+    // Grams or millilitres ("m1" is how a lowercase l is sometimes read).
+    private const val UNIT = """(g|ml|m1)"""
+    private val servingBracket = Regex("""\(\s*$NUMBER\s*$UNIT\s*\)""")
+    private val servingPlain = Regex("""$NUMBER\s*$UNIT\b""")
+    // "Per 100 g" / "Per 100 mL" with no bracket.
+    private val perAmount = Regex("""^(?:per|pour)\s+$NUMBER\s*$UNIT\b""")
     private val perRow = Regex("""^(?:per|pour)\s""")
 
     /** "Og" is how a zero followed by g is often read. */
@@ -111,15 +116,18 @@ object NutritionLabelParser {
             return null
         }
 
-        // "Serving size 2/3 cup (55g)" (US) or "Per 1 3/4 cups (100 g)" (Canada): the weight in the bracket; failing
-        // that a plain "30g" on a "serving size" row.
+        // "Serving size 2/3 cup (55g)" (US) or "Per 1 3/4 cups (100 g)" / "Per 1 cup (250 mL)" (Canada): the amount in
+        // the bracket; failing that a plain "30g" on a "serving size" row, or "Per 100 g".
         val servingIndex = cleaned.indexOfFirst { it.contains("serving size") || it.contains("serv. size") }
             .takeIf { it >= 0 }
-            ?: cleaned.indexOfFirst { row -> perRow.containsMatchIn(row) && servingBracket.containsMatchIn(row) }.takeIf { it >= 0 }
-        val servingGrams = servingIndex?.let { index ->
+            ?: cleaned.indexOfFirst { row -> perRow.containsMatchIn(row) && (servingBracket.containsMatchIn(row) || perAmount.containsMatchIn(row)) }
+                .takeIf { it >= 0 }
+        var servingUnit = ServingUnit.GRAMS
+        val servingAmount = servingIndex?.let { index ->
             val row = cleaned[index]
             (servingBracket.find(row) ?: servingPlain.find(row))?.let { match ->
                 rowOf[LabelField.SERVING] = index
+                servingUnit = if (match.groupValues[2] == "g") ServingUnit.GRAMS else ServingUnit.MILLILITRES
                 number(match)
             }
         }
@@ -129,9 +137,10 @@ object NutritionLabelParser {
             proteinG = find(LabelField.PROTEIN, protein),
             carbsG = find(LabelField.CARBS, carbs, skipSubRows = true),
             fatG = find(LabelField.FAT, fat, skipSubRows = true),
-            servingGrams = servingGrams?.takeIf { it > 0 }
+            servingAmount = servingAmount?.takeIf { it > 0 },
+            servingUnit = servingUnit
         )
-        if (label.servingGrams == null) rowOf.remove(LabelField.SERVING)
+        if (label.servingAmount == null) rowOf.remove(LabelField.SERVING)
         return ParsedLabel(label, rowOf)
     }
 }

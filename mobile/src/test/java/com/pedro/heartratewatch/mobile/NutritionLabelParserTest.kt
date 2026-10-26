@@ -38,7 +38,8 @@ class NutritionLabelParserTest {
         assertEquals(8.0, scanned.fatG!!, 0.001)
         assertEquals(37.0, scanned.carbsG!!, 0.001)
         assertEquals(3.0, scanned.proteinG!!, 0.001)
-        assertEquals(55.0, scanned.servingGrams!!, 0.001)
+        assertEquals(55.0, scanned.servingAmount!!, 0.001)
+        assertEquals(ServingUnit.GRAMS, scanned.servingUnit)
     }
 
     /** A Canadian bilingual label, row by row. */
@@ -71,7 +72,7 @@ class NutritionLabelParserTest {
         assertEquals(15.0, scanned.fatG!!, 0.001)
         assertEquals(59.0, scanned.carbsG!!, 0.001)
         assertEquals(4.0, scanned.proteinG!!, 0.001)
-        assertEquals(100.0, scanned.servingGrams!!, 0.001)
+        assertEquals(100.0, scanned.servingAmount!!, 0.001)
     }
 
     @Test
@@ -107,8 +108,21 @@ class NutritionLabelParserTest {
     }
 
     @Test
-    fun aPerServingRowInCanadaWithoutAGramWeightLeavesItBlank() {
-        assertNull(NutritionLabelParser.parse(listOf("Per 1 cup (250 mL)", "Calories 120")).servingGrams)
+    fun aCanadianServingGivenInMillilitresIsReadInMillilitres() {
+        val scanned = NutritionLabelParser.parse(
+            listOf("Nutrition Facts", "Valeur nutritive", "Per 1 cup (250 mL)", "pour 1 tasse (250 mL)", "Calories 130", "Fat / Lipides 5 g")
+        )
+        assertEquals(250.0, scanned.servingAmount!!, 0.001)
+        assertEquals(ServingUnit.MILLILITRES, scanned.servingUnit)
+        assertEquals(130.0, scanned.calories!!, 0.001)
+    }
+
+    @Test
+    fun aPlainPerHundredRowIsTheServing() {
+        val grams = NutritionLabelParser.parse(listOf("Per 100 g", "Calories 80"))
+        assertEquals(100.0, grams.servingAmount!!, 0.001)
+        assertEquals(ServingUnit.GRAMS, grams.servingUnit)
+        assertEquals(ServingUnit.MILLILITRES, NutritionLabelParser.parse(listOf("Per 100 mL", "Calories 40")).servingUnit)
     }
 
     @Test
@@ -133,7 +147,7 @@ class NutritionLabelParserTest {
         assertEquals(3.5, scanned.fatG!!, 0.001)
         assertEquals(1.0, scanned.carbsG!!, 0.001)
         assertEquals(12.5, scanned.proteinG!!, 0.001)
-        assertEquals(40.0, scanned.servingGrams!!, 0.001)
+        assertEquals(40.0, scanned.servingAmount!!, 0.001)
     }
 
     @Test
@@ -142,9 +156,9 @@ class NutritionLabelParserTest {
     }
 
     @Test
-    fun aServingWithoutAGramWeightLeavesItBlank() {
-        val scanned = NutritionLabelParser.parse(listOf("Serving size 1 cup (240mL)", "Calories 90"))
-        assertNull(scanned.servingGrams)
+    fun aServingWithNoWeightOrVolumeLeavesItBlank() {
+        val scanned = NutritionLabelParser.parse(listOf("Serving size 1 cup", "Calories 90"))
+        assertNull(scanned.servingAmount)
         assertEquals(90.0, scanned.calories!!, 0.001)
     }
 
@@ -152,7 +166,7 @@ class NutritionLabelParserTest {
     fun anOldStyleLabelWithCaloriesFromFatStillGivesTheCalories() {
         val scanned = NutritionLabelParser.parse(listOf("Serving Size 28g", "Calories 250 Calories from Fat 110"))
         assertEquals(250.0, scanned.calories!!, 0.001)
-        assertEquals(28.0, scanned.servingGrams!!, 0.001)
+        assertEquals(28.0, scanned.servingAmount!!, 0.001)
     }
 
     @Test

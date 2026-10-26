@@ -21,11 +21,23 @@ class CalorieTest {
     @Test
     fun theWeightEatenIsComparedWithTheServingWeight() {
         // a 30 g serving has 150 kcal and 5 g protein; eating 45 g is one and a half servings
-        val granola = Food("g", "Granola", calories = 150.0, proteinG = 5.0, servingGrams = 30.0)
+        val granola = Food("g", "Granola", calories = 150.0, proteinG = 5.0, servingAmount = 30.0)
         val entry = FoodEntry.of("e", granola, 45.0, 100, 0)
         assertEquals(225.0, entry.calories, 0.001)
         assertEquals(7.5, entry.proteinG, 0.001)
-        assertEquals(45.0, entry.grams, 0.001)
+        assertEquals(45.0, entry.amount, 0.001)
+        assertEquals(ServingUnit.GRAMS, entry.unit)
+    }
+
+    @Test
+    fun aDrinkMeasuredInMillilitresIsLoggedInMillilitres() {
+        // milk: 130 kcal and 9 g protein per 250 mL; drinking 500 mL is two servings
+        val milk = Food("m", "Milk", calories = 130.0, proteinG = 9.0, servingAmount = 250.0, unit = ServingUnit.MILLILITRES)
+        val entry = FoodEntry.of("e", milk, 500.0, 100, 0)
+        assertEquals(260.0, entry.calories, 0.001)
+        assertEquals(18.0, entry.proteinG, 0.001)
+        assertEquals(ServingUnit.MILLILITRES, entry.unit)
+        assertEquals("500 mL", formatQuantity(entry.amount, entry.unit))
     }
 
     @Test

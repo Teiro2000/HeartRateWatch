@@ -1,5 +1,6 @@
 package com.pedro.heartratewatch.mobile
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -93,7 +94,7 @@ fun LabelLegend(scan: LabelScan) {
         LabelField.PROTEIN -> label.proteinG?.let { "${formatAmount(it)} g" }
         LabelField.CARBS -> label.carbsG?.let { "${formatAmount(it)} g" }
         LabelField.FAT -> label.fatG?.let { "${formatAmount(it)} g" }
-        LabelField.SERVING -> label.servingGrams?.let { "${formatAmount(it)} g" }
+        LabelField.SERVING -> label.servingAmount?.let { formatQuantity(it, label.servingUnit) }
     }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         LabelField.entries.forEach { field ->
@@ -104,6 +105,24 @@ fun LabelLegend(scan: LabelScan) {
                     if (value != null) "${field.label}: $value" else "${field.label}: not found",
                     style = MaterialTheme.typography.bodySmall
                 )
+            }
+        }
+    }
+}
+
+/** A saved photo full screen, to pinch and drag over. */
+@Composable
+fun PhotoViewer(photo: Bitmap, onClose: () -> Unit) {
+    val scan = remember(photo) { LabelScan(ScannedLabel(null, null, null, null, null), photo, emptyList()) }
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Saved photo", style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = onClose) { Text("Close") }
+                }
+                Text("Pinch to zoom, drag to move.", style = MaterialTheme.typography.bodySmall)
+                LabelPreview(scan, modifier = Modifier.fillMaxWidth().weight(1f), zoomable = true)
             }
         }
     }
