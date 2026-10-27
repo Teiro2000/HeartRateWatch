@@ -339,17 +339,34 @@ private fun PlanDialog(
 ) {
     var target by remember { mutableStateOf((initial?.targetKg ?: suggestedTargetKg)?.let { formatAmount(unit.fromKg(it)) }.orEmpty()) }
     var bmr by remember { mutableStateOf(initial?.scaleBmr?.let { formatAmount(it) }.orEmpty()) }
-    var height by remember { mutableStateOf(initial?.heightCm?.let { formatAmount(unit.fromCm(it)) }.orEmpty()) }
+    // Height can be typed in feet and inches or in cm; it is kept in cm.
+    var useFeet by remember { mutableStateOf(unit == WeightUnit.LB) }
+    val initialFeet = remember { initial?.heightCm?.let { Height.feetInches(it) } }
+    var feet by remember { mutableStateOf(initialFeet?.first?.toString().orEmpty()) }
+    var inches by remember { mutableStateOf(initialFeet?.second?.let { formatAmount(it) }.orEmpty()) }
+    var centimetres by remember { mutableStateOf(initial?.heightCm?.let { formatAmount(it) }.orEmpty()) }
     var age by remember { mutableStateOf(initial?.age?.toString().orEmpty()) }
     var sex by remember { mutableStateOf(initial?.sex) }
     var pace by remember { mutableStateOf(initial?.pace ?: Pace.STEADY) }
 
     val targetValue = target.toDoubleOrNull()
     val bmrValue = bmr.toDoubleOrNull()
-    val heightValue = height.toDoubleOrNull()
+    val heightValue: Double? = if (useFeet) {
+        if (feet.isBlank() && inches.isBlank()) null else Height.cm(feet.toDoubleOrNull() ?: 0.0, inches.toDoubleOrNull() ?: 0.0)
+    } else centimetres.toDoubleOrNull()
+    fun switchHeightTo(feetMode: Boolean) {
+        heightValue?.let { cm ->
+            if (feetMode) {
+                val (f, i) = Height.feetInches(cm)
+                feet = f.toString()
+                inches = formatAmount(i)
+            } else centimetres = formatAmount(cm)
+        }
+        useFeet = feetMode
+    }
     val ageValue = age.toIntOrNull()
     val bmrOk = bmrValue != null && bmrValue in 800.0..4500.0
-    val profileOk = heightValue != null && heightValue > 0 && ageValue != null && ageValue in 10..100 && sex != null
+    val profileOk = heightValue != null && heightValue in 90.0..250.0 && ageValue != null && ageValue in 10..100 && sex != null
     val valid = targetValue != null && targetValue > 0 && (if (bmr.isBlank()) profileOk else bmrOk)
     val numberOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
 
@@ -369,8 +386,19 @@ private fun PlanDialog(
                 Text("Your BMR", style = MaterialTheme.typography.labelLarge)
                 OutlinedTextField(value = bmr, onValueChange = { bmr = decimalOnly(it) }, label = { Text("BMR from your scale (kcal)") }, singleLine = true, keyboardOptions = numberOptions, isError = bmr.isNotBlank() && !bmrOk, modifier = Modifier.fillMaxWidth())
                 Text("No scale number? Leave it blank and fill these in; the BMR is worked out from them and your weight.", style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Height", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    listOf("ft / in" to true, "cm" to false).forEach { (label, feetMode) ->
+                        if (useFeet == feetMode) Button(onClick = {}) { Text(label) } else OutlinedButton(onClick = { switchHeightTo(feetMode) }) { Text(label) }
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = height, onValueChange = { height = decimalOnly(it) }, label = { Text("Height (${unit.heightLabel})") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
+                    if (useFeet) {
+                        OutlinedTextField(value = feet, onValueChange = { feet = it.filter(Char::isDigit).take(1) }, label = { Text("Feet") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = inches, onValueChange = { inches = decimalOnly(it) }, label = { Text("Inches") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
+                    } else {
+                        OutlinedTextField(value = centimetres, onValueChange = { centimetres = decimalOnly(it) }, label = { Text("Height (cm)") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
+                    }
                     OutlinedTextField(value = age, onValueChange = { age = it.filter(Char::isDigit).take(3) }, label = { Text("Age") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -390,7 +418,7 @@ private fun PlanDialog(
                             pace = pace,
                             estimateStartDay = initial?.estimateStartDay ?: 0L,
                             scaleBmr = bmrValue.takeIf { bmr.isNotBlank() },
-                            heightCm = heightValue?.let { unit.toCm(it) },
+                            heightCm = heightValue,
                             age = ageValue,
                             sex = sex
                         )

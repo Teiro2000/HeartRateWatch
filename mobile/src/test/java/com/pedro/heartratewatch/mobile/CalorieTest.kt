@@ -164,8 +164,46 @@ class CalorieTest {
     fun weightUnitsConvertBothWays() {
         assertEquals(176.37, WeightUnit.LB.fromKg(80.0), 0.01)
         assertEquals(80.0, WeightUnit.LB.toKg(WeightUnit.LB.fromKg(80.0)), 0.0001)
-        assertEquals(70.87, WeightUnit.LB.fromCm(180.0), 0.01)
-        assertEquals(180.0, WeightUnit.KG.fromCm(180.0), 0.0001)
+    }
+
+    @Test
+    fun heightIsTypedInFeetAndInchesOrCentimetres() {
+        assertEquals(177.8, Height.cm(5.0, 10.0), 0.001)
+        assertEquals(5 to 10.0, Height.feetInches(177.8))
+        assertEquals(6 to 0.0, Height.feetInches(182.8)) // 71.97 in rounds up to a whole 6 ft, not 5 ft 12 in
+    }
+
+    private fun targetFor(goalKcal: Int, change: Double, kg: Double?) = CalorieTarget(
+        goal = goalKcal, maintenance = goalKcal - change, bmr = 1700.0, bmrFromProfile = false,
+        source = EstimateSource.STARTING_GUESS, confidence = 0.0, currentKg = kg, dailyChange = change,
+        flooredAtMinimum = false, recentWeeklyXp = 0.0, usualWeeklyXp = null, projectedDay = null
+    )
+
+    @Test
+    fun cuttingGetsMoreProteinPerKgThanBulking() {
+        val cut = CalorieTargets.macros(targetFor(2200, -275.0, 80.0))
+        val bulk = CalorieTargets.macros(targetFor(2800, 275.0, 80.0))
+        assertEquals("cutting", cut.mode)
+        assertEquals(176.0, cut.proteinG, 0.001)
+        assertEquals("bulking", bulk.mode)
+        assertEquals(144.0, bulk.proteinG, 0.001)
+        assertTrue(bulk.carbsG > cut.carbsG)
+    }
+
+    @Test
+    fun theRecommendedMacrosAddUpToTheGoal() {
+        val split = CalorieTargets.macros(targetFor(2500, 0.0, 75.0))
+        assertEquals("maintaining", split.mode)
+        assertEquals(2500.0, split.proteinG * 4 + split.carbsG * 4 + split.fatG * 9, 0.5)
+        assertEquals(2500 * 0.25 / 9, split.fatG, 0.001)
+    }
+
+    @Test
+    fun proteinIsCappedAtAShareOfTheCaloriesForAHeavyPerson() {
+        // 140 kg x 2.2 g would be 308 g (1232 kcal) of a 1800 kcal goal; capped at 35% = 157.5 g
+        val split = CalorieTargets.macros(targetFor(1800, -275.0, 140.0))
+        assertEquals(157.5, split.proteinG, 0.001)
+        assertTrue(split.carbsG >= 0)
     }
 
     @Test

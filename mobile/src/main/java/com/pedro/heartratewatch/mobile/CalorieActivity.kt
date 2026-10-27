@@ -171,6 +171,7 @@ private fun CalorieScreen() {
                     }
                 }
             }
+            item { MacroCard(totals, target?.let { CalorieTargets.macros(it) }) }
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { picking = true }, modifier = Modifier.weight(1f)) { Text("+ Log food") }

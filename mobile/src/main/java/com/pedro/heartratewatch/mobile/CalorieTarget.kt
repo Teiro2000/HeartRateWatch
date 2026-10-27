@@ -12,9 +12,20 @@ private const val LB_PER_KG = 2.2046226218
 
 fun WeightUnit.fromKg(kg: Double): Double = fromLb(kg * LB_PER_KG)
 fun WeightUnit.toKg(value: Double): Double = toLb(value) / LB_PER_KG
-val WeightUnit.heightLabel: String get() = if (this == WeightUnit.LB) "in" else "cm"
-fun WeightUnit.fromCm(cm: Double): Double = if (this == WeightUnit.LB) cm / 2.54 else cm
-fun WeightUnit.toCm(value: Double): Double = if (this == WeightUnit.LB) value * 2.54 else value
+
+/** Height is typed in feet and inches or in centimetres, and kept in centimetres. */
+object Height {
+    fun cm(feet: Double, inches: Double): Double = (feet * 12 + inches) * 2.54
+
+    /** Whole feet and the inches left over (to a tenth), e.g. 178 cm is 5 ft 10.1 in. */
+    fun feetInches(cm: Double): Pair<Int, Double> {
+        val totalInches = cm / 2.54
+        var feet = (totalInches / 12).toInt()
+        var inches = Math.round((totalInches - feet * 12) * 10) / 10.0
+        if (inches >= 12) { feet += 1; inches = 0.0 }
+        return feet to inches
+    }
+}
 
 /** A morning weight, in kg, on one day. */
 data class WeighIn(val epochDay: Long, val kg: Double)
@@ -51,6 +62,9 @@ data class WeightPlan(
 }
 
 enum class EstimateSource { STARTING_GUESS, LEARNING, MEASURED }
+
+/** A day's protein, carbs and fat (grams) that suits the plan: [mode] is "cutting", "bulking" or "maintaining". */
+data class MacroSplit(val mode: String, val proteinG: Double, val carbsG: Double, val fatG: Double, val explanation: String)
 
 /** The daily calorie goal and how it was worked out. */
 data class CalorieTarget(
@@ -115,6 +129,24 @@ object CalorieTargets {
         val denominator = points.sumOf { (it.epochDay - meanX) * (it.epochDay - meanX) }
         if (denominator == 0.0) return 0.0
         return points.sumOf { (it.epochDay - meanX) * (it.kg - meanY) } / denominator
+    }
+
+    /**
+     * A protein, carbs and fat split for the goal. Protein is set by body weight (2.2 g per kg when cutting, to hold on to
+     * muscle; 1.8 g per kg when bulking or maintaining) but never more than 35% of the calories; fat is a quarter of
+     * the calories; carbs fill the rest. Which of cutting, bulking or maintaining it is follows the weight plan.
+     */
+    fun macros(target: CalorieTarget): MacroSplit {
+        val kcal = target.goal.toDouble()
+        val (mode, perKg, why) = when {
+            target.dailyChange < 0 -> Triple("cutting", 2.2, "high protein to hold on to muscle while you lose weight, a quarter of calories from fat, and the rest carbs for training.")
+            target.dailyChange > 0 -> Triple("bulking", 1.8, "enough protein to build muscle, a quarter of calories from fat, and plenty of carbs to fuel training and growth.")
+            else -> Triple("maintaining", 1.8, "steady protein, a quarter of calories from fat, and the rest carbs.")
+        }
+        val protein = min(target.currentKg?.let { it * perKg } ?: (kcal * 0.30 / 4), kcal * 0.35 / 4)
+        val fat = kcal * 0.25 / 9
+        val carbs = max(0.0, (kcal - protein * 4 - fat * 9) / 4)
+        return MacroSplit(mode, protein, carbs, fat, why)
     }
 
     /** Null when the BMR can't be known yet (it needs the scale's number, or height, age, sex and a weigh-in). */
