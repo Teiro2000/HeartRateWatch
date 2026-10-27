@@ -514,6 +514,16 @@ private fun FoodEditorDialog(
                     OutlinedTextField(value = carbs, onValueChange = { carbs = decimalOnly(it) }, label = { Text("Carbs g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                     OutlinedTextField(value = fat, onValueChange = { fat = decimalOnly(it) }, label = { Text("Fat g") }, singleLine = true, keyboardOptions = numberOptions, modifier = Modifier.weight(1f))
                 }
+                val proteinG = protein.toDoubleOrNull() ?: 0.0
+                val carbsG = carbs.toDoubleOrNull() ?: 0.0
+                val fatG = fat.toDoubleOrNull() ?: 0.0
+                if (kcal != null && CalorieChecks.caloriesLookOff(kcal, proteinG, carbsG, fatG)) {
+                    Text(
+                        "The macros add up to about ${formatAmount(proteinG * 4 + carbsG * 4 + fatG * 9)} kcal but the calories say ${formatAmount(kcal)}. Check the calories against the label.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = servingSize,
@@ -528,6 +538,7 @@ private fun FoodEditorDialog(
                         else OutlinedButton(onClick = { unit = option }) { Text(option.label) }
                     }
                 }
+                if (initial != null) Text("Saving changes also updates anything already logged from this food.", style = MaterialTheme.typography.bodySmall)
                 Text("Eaten right now? (optional)", style = MaterialTheme.typography.labelLarge)
                 OutlinedTextField(
                     value = eaten,

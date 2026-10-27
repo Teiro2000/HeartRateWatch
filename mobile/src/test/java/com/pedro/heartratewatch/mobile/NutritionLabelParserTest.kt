@@ -170,6 +170,23 @@ class NutritionLabelParserTest {
     }
 
     @Test
+    fun caloriesFollowedByADailyValueColumnKeepAllTheirDigits() {
+        // "240 %" must not back off to "24" because a number followed by a percent isn't taken.
+        assertEquals(240.0, NutritionLabelParser.parse(listOf("Calories 240 % Daily Value")).calories!!, 0.001)
+        assertEquals(130.0, NutritionLabelParser.parse(listOf("Calories 130 %")).calories!!, 0.001)
+        assertEquals(90.0, NutritionLabelParser.parse(listOf("Calories 90 % valeur quotidienne")).calories!!, 0.001)
+    }
+
+    @Test
+    fun caloriesThatDontMatchTheMacrosAreFlagged() {
+        assertTrue(CalorieChecks.caloriesLookOff(13.0, 27.0, 3.0, 1.5))   // 130 with the zero dropped
+        assertTrue(CalorieChecks.caloriesLookOff(9.0, 3.0, 3.0, 8.0))
+        assertFalse(CalorieChecks.caloriesLookOff(240.0, 10.0, 2.0, 21.0))
+        assertFalse(CalorieChecks.caloriesLookOff(105.0, 1.0, 27.0, 0.0))
+        assertFalse(CalorieChecks.caloriesLookOff(5.0, 0.0, 0.0, 0.0))    // no macros entered, nothing to compare
+    }
+
+    @Test
     fun piecesOnTheSameLineOfThePictureJoinIntoOneRow() {
         // The big "Calories" and "230" come back separately, side by side; the next row is lower down.
         val rows = NutritionLabelParser.rows(

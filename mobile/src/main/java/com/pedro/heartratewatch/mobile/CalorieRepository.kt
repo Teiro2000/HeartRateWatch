@@ -132,6 +132,11 @@ class CalorieRepository(private val context: Context) {
             val (kept, dropped) = replaced.partition { it.id == id || !it.name.equals(saved.name, ignoreCase = true) }
             dropped.forEach { FoodPhotos.delete(context, it.id) }
             prefs[Keys.FOODS] = foodsToJson(kept)
+            // Editing a food updates what was already logged from it.
+            if (existing != null) {
+                val entries = prefs[Keys.ENTRIES]?.let(::parseEntries).orEmpty()
+                prefs[Keys.ENTRIES] = entriesToJson(withEditedFood(entries, saved, existing.name, dropped.map { it.id }.toSet()))
+            }
         }
         return saved
     }
@@ -171,6 +176,7 @@ class CalorieRepository(private val context: Context) {
                     .put("amount", e.amount).put("unit", e.unit.label)
                     .put("kcal", e.calories).put("protein", e.proteinG).put("carbs", e.carbsG).put("fat", e.fatG)
                     .put("at", e.loggedAtMillis)
+                    .also { o -> e.foodId?.let { o.put("food", it) } }
             )
         }
     }.toString()
@@ -189,7 +195,8 @@ class CalorieRepository(private val context: Context) {
                 proteinG = o.optDouble("protein", 0.0),
                 carbsG = o.optDouble("carbs", 0.0),
                 fatG = o.optDouble("fat", 0.0),
-                loggedAtMillis = o.optLong("at", 0L)
+                loggedAtMillis = o.optLong("at", 0L),
+                foodId = o.optString("food").takeIf { it.isNotEmpty() }
             )
         }
     }

@@ -167,6 +167,30 @@ class CalorieTest {
     }
 
     @Test
+    fun editingAFoodRewritesTheEntriesLoggedFromIt() {
+        val old = Food(id = "f1", name = "Cheese", calories = 12.0, proteinG = 7.0, carbsG = 1.0, fatG = 10.0, servingAmount = 30.0)
+        val fixed = old.copy(calories = 120.0)
+        val other = Food(id = "f2", name = "Eggs", calories = 160.0, servingAmount = 105.0)
+        val linked = FoodEntry.of("a", old, 63.0, 100, 1L)
+        val legacy = linked.copy(id = "b", foodId = null) // logged before entries kept the food's id
+        val unrelated = FoodEntry.of("c", other, 105.0, 100, 1L)
+        val result = withEditedFood(listOf(linked, legacy, unrelated), fixed, previousName = "cheese")
+        assertEquals(252.0, result[0].calories, 0.001)
+        assertEquals(252.0, result[1].calories, 0.001)
+        assertEquals("f1", result[1].foodId)
+        assertEquals(63.0, result[0].amount, 0.0)
+        assertEquals(unrelated, result[2])
+    }
+
+    @Test
+    fun renamingAFoodRenamesItsEntries() {
+        val old = Food(id = "f1", name = "Chiken", calories = 170.0, servingAmount = 69.0)
+        val entry = FoodEntry.of("a", old, 69.0, 100, 1L)
+        val result = withEditedFood(listOf(entry), old.copy(name = "Chicken"), previousName = "Chiken")
+        assertEquals("Chicken", result[0].name)
+    }
+
+    @Test
     fun heightIsTypedInFeetAndInchesOrCentimetres() {
         assertEquals(177.8, Height.cm(5.0, 10.0), 0.001)
         assertEquals(5 to 10.0, Height.feetInches(177.8))

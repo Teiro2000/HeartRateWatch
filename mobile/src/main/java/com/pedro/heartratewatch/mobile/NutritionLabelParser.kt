@@ -76,7 +76,9 @@ object NutritionLabelParser {
     fun rows(lines: List<OcrLine>): List<String> = rowBoxes(lines).map { it.text }
 
     private const val NUMBER = """(\d+(?:[.,]\d+)?)"""
-    private val calories = Regex("""calories\s*[:\-]?\s*$NUMBER(?!\s*(?:g\b|mg\b|%))""")
+    // A percent after it is fine ("Calories 240  % Daily Value"); (?!\d) stops the number backing off a digit (240 -> 24)
+    // when the grams check fails.
+    private val calories = Regex("""calories\s*[:\-]?\s*$NUMBER(?!\d|\s*(?:g\b|mg\b))""")
     // Labels from other countries give the energy as "1046 kJ / 250 kcal" instead.
     private val kcal = Regex("""$NUMBER\s*kcal\b""")
     // The nutrient's name (in English or French) then, within a few characters, its amount in grams.
