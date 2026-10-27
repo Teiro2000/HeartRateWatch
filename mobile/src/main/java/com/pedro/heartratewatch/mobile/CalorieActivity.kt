@@ -162,11 +162,9 @@ private fun CalorieScreen() {
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (target == null) {
-                                TextButton(onClick = { editingGoal = true }) { Text(if (manualGoal != null) "Change daily goal" else "Set a daily goal") }
+                                OutlinedButton(onClick = { editingGoal = true }) { Text(if (manualGoal != null) "Change daily goal" else "Set a daily goal") }
                             }
-                            TextButton(onClick = { WeightPlanActivity.open(context) }) {
-                                Text(if (target != null) "Weight plan (goal from it)" else "Weight plan")
-                            }
+                            OutlinedButton(onClick = { WeightPlanActivity.open(context) }) { Text("Weight plan") }
                         }
                     }
                 }
