@@ -38,6 +38,14 @@
             android:exported="false" />
 
         <activity
+            android:name=".CalorieActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".WeightPlanActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".RouteViewActivity"
             android:exported="false" />
 
@@ -64,6 +72,17 @@
         <activity
             android:name=".MonthlyChartActivity"
             android:exported="false" />
+
+        <!-- Where the camera saves a photo of a nutrition label (see CalorieActivity). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <service
             android:name=".PhoneTrackingService"

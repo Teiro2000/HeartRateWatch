@@ -15,22 +15,23 @@ import java.util.zip.ZipOutputStream
 
 /**
  * One file with everything the app keeps on this phone: the saved data of every part of it (cardio
- * history, workouts, templates and exercises, settings, personal bests, level progress) and the saved
- * routes. It's a zip of the app's own data files, so a restore brings back exactly what was saved.
+ * history, workouts, templates and exercises, settings, personal bests, level progress, calories and the food
+ * photos) and the saved routes. It's a zip of the app's own data files, so a restore brings back exactly what was saved.
  *
- * Not included: custom alert sounds (they point at files on the phone that can't be carried over, so
- * choose them again) and the data kept on the watch.
+ * Not included: the alert volume (kept in a plain settings file, not the data files) and the data kept on the watch.
  */
 object Backup {
 
     private const val FORMAT = 1
     private const val META = "meta.json"
-    private val ALLOWED = Regex("^(datastore/[A-Za-z0-9_.-]+\\.preferences_pb|routes/[0-9]+\\.bin)$")
+    private val ALLOWED = Regex("^(datastore/[A-Za-z0-9_.-]+\\.preferences_pb|routes/[0-9]+\\.bin|food_photos/[A-Za-z0-9-]+\\.jpg)$")
 
     private fun dataFiles(context: Context): List<Pair<String, File>> {
         val datastore = File(context.filesDir, "datastore").listFiles { f -> f.name.endsWith(".preferences_pb") }.orEmpty()
         val routes = File(context.filesDir, "routes").listFiles { f -> f.name.endsWith(".bin") }.orEmpty()
-        return datastore.map { "datastore/${it.name}" to it } + routes.map { "routes/${it.name}" to it }
+        val photos = File(context.filesDir, FoodPhotos.FOLDER).listFiles { f -> f.name.endsWith(".jpg") }.orEmpty()
+        return datastore.map { "datastore/${it.name}" to it } + routes.map { "routes/${it.name}" to it } +
+            photos.map { "${FoodPhotos.FOLDER}/${it.name}" to it }
     }
 
     /** Writes the backup; returns how many data files went in. */
@@ -78,6 +79,7 @@ object Backup {
         dataFiles(context).forEach { (_, file) -> file.delete() }
         File(context.filesDir, "datastore").mkdirs()
         File(context.filesDir, "routes").mkdirs()
+        File(context.filesDir, FoodPhotos.FOLDER).mkdirs()
         entries.forEach { (name, bytes) -> File(context.filesDir, name).writeBytes(bytes) }
 
         // The watch needs the restored settings and stats pushed to it once the app is back up (see HomeScreen).

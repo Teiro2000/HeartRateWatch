@@ -1,7 +1,6 @@
 package com.pedro.heartratewatch.mobile
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.media.audiofx.LoudnessEnhancer
@@ -15,9 +14,8 @@ import kotlin.math.pow
  * break alert in my headset while the app runs on my watch" work -- see the project's
  * requirements.md doc, "Cross-device audio" section, for the reasoning.
  *
- * Custom sounds are stored and played from here (the phone), not synced to the watch -- that
- * avoids Wear OS's more limited on-watch storage entirely, and matches where the audio actually
- * plays anyway. Each alert type has a bundled default (res/raw) used until a custom sound is set.
+ * The sounds are the ones bundled with the app (res/raw), one per alert type; the only thing
+ * you can change is how loud they all are (see [volumeDb]).
  *
  * Alerts never cut each other off: one that arrives while another is playing waits its turn. The
  * wait list is deliberately short and expires quickly, since a run changes fast and a cue that
@@ -28,26 +26,16 @@ class AlertPlayer(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("custom_sounds", Context.MODE_PRIVATE)
 
-    /** Call after the user picks an audio file via a document picker for a given alert type. */
-    fun setCustomSound(type: AlertType, uri: Uri) {
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        }
-        prefs.edit().putString(type.name, uri.toString()).apply()
-    }
-
-    fun clearCustomSound(type: AlertType) {
-        prefs.edit().remove(type.name).apply()
-    }
-
-    /** Per-alert loudness in dB relative to the file's own level: negative is quieter, positive
+    /** Loudness of every alert in dB relative to the sound's own level: negative is quieter, positive
      * boosts past what the player's volume alone can reach (see [startLocked]). 0 = unchanged. */
-    fun volumeDb(type: AlertType): Int = prefs.getInt(volumeKey(type), 0)
+    fun volumeDb(): Int {
+        if (prefs.contains(VOLUME_KEY)) return prefs.getInt(VOLUME_KEY, 0)
+        // From when each alert had its own volume: keep the first one that was changed.
+        return AlertType.entries.map { prefs.getInt("volume_db_${it.name}", 0) }.firstOrNull { it != 0 } ?: 0
+    }
 
-    fun setVolumeDb(type: AlertType, db: Int) {
-        prefs.edit().putInt(volumeKey(type), db.coerceIn(MIN_VOLUME_DB, MAX_VOLUME_DB)).apply()
+    fun setVolumeDb(db: Int) {
+        prefs.edit().putInt(VOLUME_KEY, db.coerceIn(MIN_VOLUME_DB, MAX_VOLUME_DB)).apply()
     }
 
     /**
@@ -89,10 +77,8 @@ class AlertPlayer(private val context: Context) {
     }
 
     private fun startLocked(type: AlertType): Boolean {
-        val customUriString = prefs.getString(type.name, null)
-        val uri = customUriString?.let(Uri::parse)
-            ?: Uri.parse("android.resource://${context.packageName}/${defaultSoundResId(type)}")
-        val db = volumeDb(type)
+        val uri = Uri.parse("android.resource://${context.packageName}/${soundResId(type)}")
+        val db = volumeDb()
 
         val player = MediaPlayer()
         return try {
@@ -168,9 +154,7 @@ class AlertPlayer(private val context: Context) {
         currentType = null
     }
 
-    private fun volumeKey(type: AlertType) = "volume_db_${type.name}"
-
-    private fun defaultSoundResId(type: AlertType): Int = when (type) {
+    private fun soundResId(type: AlertType): Int = when (type) {
         AlertType.HIGH_HR -> R.raw.alert_high_hr
         AlertType.LOW_HR -> R.raw.alert_low_hr
         AlertType.PACE_TOO_FAST -> R.raw.alert_pace_too_fast
@@ -182,6 +166,7 @@ class AlertPlayer(private val context: Context) {
     private class Pending(val type: AlertType, val queuedAtMillis: Long)
 
     companion object {
+        private const val VOLUME_KEY = "volume_db"
         const val MIN_VOLUME_DB = -20
         const val MAX_VOLUME_DB = 12
 
