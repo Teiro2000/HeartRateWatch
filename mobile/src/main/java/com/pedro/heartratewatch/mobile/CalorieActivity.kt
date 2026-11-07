@@ -78,7 +78,7 @@ class CalorieActivity : ComponentActivity() {
     }
 }
 
-private fun decimalOnly(text: String): String {
+internal fun decimalOnly(text: String): String {
     val filtered = text.filter { it.isDigit() || it == '.' }
     val firstDot = filtered.indexOf('.')
     return if (firstDot < 0) filtered else filtered.substring(0, firstDot + 1) + filtered.substring(firstDot + 1).replace(".", "")
@@ -86,6 +86,9 @@ private fun decimalOnly(text: String): String {
 
 /** The food editor is open for [food], or for a new food when it is null. */
 private class EditorTarget(val food: Food?)
+
+/** The group editor is open for [group], or for a new group when it is null. */
+private class GroupEditorTarget(val group: FoodGroup?)
 
 @Composable
 private fun CalorieScreen() {
@@ -95,6 +98,7 @@ private fun CalorieScreen() {
     val scope = rememberCoroutineScope()
     val entries by repository.entriesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val foods by repository.foodsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val groups by repository.groupsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val manualGoal by repository.goalFlow.collectAsStateWithLifecycle(initialValue = null)
     // With a weight plan the goal is worked out from it; otherwise it's the number typed in.
     val target = rememberCalorieTarget(repository)
@@ -109,9 +113,18 @@ private fun CalorieScreen() {
     var editor by remember { mutableStateOf<EditorTarget?>(null) }
     var deleting by remember { mutableStateOf<Food?>(null) }
     var editingGoal by remember { mutableStateOf(false) }
+    var groupEditor by remember { mutableStateOf<GroupEditorTarget?>(null) }
+    var loggingGroup by remember { mutableStateOf<FoodGroup?>(null) }
+    var deletingGroup by remember { mutableStateOf<FoodGroup?>(null) }
+    var editingEntry by remember { mutableStateOf<FoodEntry?>(null) }
+    var expandedMeals by remember { mutableStateOf(setOf<String>()) }
+    var deletingMeal by remember { mutableStateOf<DayItem.Meal?>(null) }
+    // The meal an ingredient is being added to (pick the food, then the amount).
+    var addingToMeal by remember { mutableStateOf<DayItem.Meal?>(null) }
 
     val totals = remember(entries, day) { dayTotals(entries, day.toEpochDay()) }
     val dayEntries = remember(entries, day) { entries.filter { it.epochDay == day.toEpochDay() }.sortedBy { it.loggedAtMillis } }
+    val items = remember(dayEntries) { dayItems(dayEntries) }
     val dayFormat = remember { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM) }
 
     Scaffold { innerPadding ->
@@ -179,22 +192,36 @@ private fun CalorieScreen() {
             if (dayEntries.isEmpty()) {
                 item { Text("Nothing logged for this day.", style = MaterialTheme.typography.bodyMedium) }
             }
-            items(dayEntries, key = { it.id }) { entry ->
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(entry.name, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "${formatQuantity(entry.amount, entry.unit)}  ·  " +
-                                    "P ${formatAmount(entry.proteinG)}  C ${formatAmount(entry.carbsG)}  F ${formatAmount(entry.fatG)} g",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+            items(items, key = { if (it is DayItem.Meal) "meal-${it.id}" else (it as DayItem.Single).entry.id }) { item ->
+                when (item) {
+                    is DayItem.Meal -> MealCard(
+                        meal = item,
+                        expanded = item.id in expandedMeals,
+                        onToggle = { expandedMeals = if (item.id in expandedMeals) expandedMeals - item.id else expandedMeals + item.id },
+                        onEditEntry = { editingEntry = it },
+                        onDeleteEntry = { entry -> scope.launch { repository.deleteEntry(entry.id) } },
+                        onAddIngredient = { addingToMeal = item },
+                        onDeleteMeal = { deletingMeal = item }
+                    )
+                    is DayItem.Single -> {
+                        val entry = item.entry
+                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { editingEntry = entry }.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(entry.name, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        "${formatQuantity(entry.amount, entry.unit)}  ·  " +
+                                            "P ${formatAmount(entry.proteinG)}  C ${formatAmount(entry.carbsG)}  F ${formatAmount(entry.fatG)} g",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                Text("${formatAmount(entry.calories)} kcal", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                TextButton(onClick = { scope.launch { repository.deleteEntry(entry.id) } }) { Text("X") }
+                            }
                         }
-                        Text("${formatAmount(entry.calories)} kcal", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                        TextButton(onClick = { scope.launch { repository.deleteEntry(entry.id) } }) { Text("X") }
                     }
                 }
             }
@@ -205,6 +232,8 @@ private fun CalorieScreen() {
     if (picking) {
         LogFoodDialog(
             foods = foods,
+            groups = groups,
+            onPickGroup = { picking = false; loggingGroup = it },
             onPick = { picking = false; eating = it },
             onNewFood = { picking = false; editor = EditorTarget(null) },
             onDismiss = { picking = false }
@@ -213,20 +242,80 @@ private fun CalorieScreen() {
     if (browsing) {
         MyFoodsScreen(
             foods = foods,
+            groups = groups,
+            onAddGroup = { groupEditor = GroupEditorTarget(null) },
+            onEditGroup = { groupEditor = GroupEditorTarget(it) },
+            onLogGroup = { loggingGroup = it },
+            onDeleteGroup = { deletingGroup = it },
             onAdd = { editor = EditorTarget(null) },
             onEdit = { editor = EditorTarget(it) },
             onDelete = { deleting = it },
             onClose = { browsing = false }
         )
     }
+    addingToMeal?.let { meal ->
+        if (eating == null) FoodPickerDialog("Add to ${meal.name}", foods, onPick = { eating = it }, onDismiss = { addingToMeal = null })
+    }
     eating?.let { food ->
         AmountEatenDialog(
             food = food,
             onLog = { amount ->
-                scope.launch { repository.log(food, amount, day.toEpochDay()) }
+                val meal = addingToMeal
+                scope.launch { repository.log(food, amount, day.toEpochDay(), meal?.id, meal?.name) }
                 eating = null
+                addingToMeal = null
             },
-            onDismiss = { eating = null }
+            onDismiss = { eating = null; addingToMeal = null }
+        )
+    }
+    loggingGroup?.let { group ->
+        GroupLogDialog(
+            group = group,
+            foods = foods,
+            onLog = { scale ->
+                scope.launch { repository.logGroup(group, scale, day.toEpochDay()) }
+                loggingGroup = null
+            },
+            onDismiss = { loggingGroup = null }
+        )
+    }
+    groupEditor?.let { target ->
+        GroupEditorDialog(
+            initial = target.group,
+            foods = foods,
+            onSave = { scope.launch { repository.saveGroup(it) }; groupEditor = null },
+            onDismiss = { groupEditor = null }
+        )
+    }
+    editingEntry?.let { entry ->
+        EntryEditDialog(
+            entry = entry,
+            foods = foods,
+            onSave = { food, amount ->
+                scope.launch { repository.updateEntry(entry.id, food, amount) }
+                editingEntry = null
+            },
+            onDismiss = { editingEntry = null }
+        )
+    }
+    deletingGroup?.let { group ->
+        AlertDialog(
+            onDismissRequest = { deletingGroup = null },
+            text = { Text("Delete the group ${group.name}? Its foods stay in My foods, and what you already logged stays.") },
+            confirmButton = {
+                TextButton(onClick = { scope.launch { repository.deleteGroup(group.id) }; deletingGroup = null }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deletingGroup = null }) { Text("Cancel") } }
+        )
+    }
+    deletingMeal?.let { meal ->
+        AlertDialog(
+            onDismissRequest = { deletingMeal = null },
+            text = { Text("Remove ${meal.name} and its ${meal.entries.size} ingredients from this day?") },
+            confirmButton = {
+                TextButton(onClick = { scope.launch { repository.deleteMeal(meal.id) }; deletingMeal = null }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { deletingMeal = null }) { Text("Cancel") } }
         )
     }
     editor?.let { target ->
@@ -245,7 +334,7 @@ private fun CalorieScreen() {
     deleting?.let { food ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            text = { Text("Remove ${food.name} from My foods? What you already logged stays.") },
+            text = { Text("Remove ${food.name} from My foods? It also leaves any group it is in. What you already logged stays.") },
             confirmButton = {
                 TextButton(onClick = { scope.launch { repository.deleteFood(food.id) }; deleting = null }) { Text("Remove") }
             },
@@ -263,7 +352,7 @@ private fun CalorieScreen() {
 
 /** The small photo a food was entered from, or a plain plate icon when it has none. */
 @Composable
-private fun FoodThumbnail(food: Food, size: Dp = 48.dp) {
+internal fun FoodThumbnail(food: Food, size: Dp = 48.dp) {
     val context = LocalContext.current
     val image by produceState<ImageBitmap?>(null, food.id, food.photoAt) {
         value = if (food.hasPhoto) withContext(Dispatchers.IO) { FoodPhotos.load(context, food.id, 240)?.asImageBitmap() } else null
@@ -283,7 +372,7 @@ private fun FoodThumbnail(food: Food, size: Dp = 48.dp) {
 }
 
 @Composable
-private fun FoodRow(food: Food, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+internal fun FoodRow(food: Food, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = modifier.fillMaxWidth()) {
         FoodThumbnail(food)
         Column(modifier = Modifier.weight(1f)) {
@@ -299,9 +388,17 @@ private fun FoodRow(food: Food, modifier: Modifier = Modifier, trailing: @Compos
 
 /** Pick a food from the database to log; what was eaten is asked next. */
 @Composable
-private fun LogFoodDialog(foods: List<Food>, onPick: (Food) -> Unit, onNewFood: () -> Unit, onDismiss: () -> Unit) {
+private fun LogFoodDialog(
+    foods: List<Food>,
+    groups: List<FoodGroup>,
+    onPick: (Food) -> Unit,
+    onPickGroup: (FoodGroup) -> Unit,
+    onNewFood: () -> Unit,
+    onDismiss: () -> Unit
+) {
     var query by remember { mutableStateOf("") }
     val shown = remember(foods, query) { foods.filter { it.name.contains(query.trim(), ignoreCase = true) } }
+    val shownGroups = remember(groups, query) { groups.filter { it.name.contains(query.trim(), ignoreCase = true) } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Log food") },
@@ -311,7 +408,12 @@ private fun LogFoodDialog(foods: List<Food>, onPick: (Food) -> Unit, onNewFood: 
                     Text("No saved foods yet. Add one with New food; it's kept here for next time.", style = MaterialTheme.typography.bodyMedium)
                 } else {
                     OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Search my foods") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    if (shown.isEmpty()) Text("No food matches that.", style = MaterialTheme.typography.bodyMedium)
+                    if (shown.isEmpty() && shownGroups.isEmpty()) Text("No food matches that.", style = MaterialTheme.typography.bodyMedium)
+                    if (shownGroups.isNotEmpty()) {
+                        Text("Groups", style = MaterialTheme.typography.labelLarge)
+                        shownGroups.forEach { group -> GroupRow(group, foods, modifier = Modifier.clickable { onPickGroup(group) }.padding(vertical = 6.dp)) }
+                        if (shown.isNotEmpty()) Text("Foods", style = MaterialTheme.typography.labelLarge)
+                    }
                     shown.forEach { food -> FoodRow(food, modifier = Modifier.clickable { onPick(food) }.padding(vertical = 6.dp)) }
                 }
             }
@@ -323,7 +425,19 @@ private fun LogFoodDialog(foods: List<Food>, onPick: (Food) -> Unit, onNewFood: 
 
 /** The whole food database: add a food without logging it, edit one, or remove one. */
 @Composable
-private fun MyFoodsScreen(foods: List<Food>, onAdd: () -> Unit, onEdit: (Food) -> Unit, onDelete: (Food) -> Unit, onClose: () -> Unit) {
+private fun MyFoodsScreen(
+    foods: List<Food>,
+    groups: List<FoodGroup>,
+    onAddGroup: () -> Unit,
+    onEditGroup: (FoodGroup) -> Unit,
+    onLogGroup: (FoodGroup) -> Unit,
+    onDeleteGroup: (FoodGroup) -> Unit,
+    onAdd: () -> Unit,
+    onEdit: (Food) -> Unit,
+    onDelete: (Food) -> Unit,
+    onClose: () -> Unit
+) {
+    var expandedGroups by remember { mutableStateOf(setOf<String>()) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -331,10 +445,32 @@ private fun MyFoodsScreen(foods: List<Food>, onAdd: () -> Unit, onEdit: (Food) -
                     Text("My foods", style = MaterialTheme.typography.titleLarge)
                     TextButton(onClick = onClose) { Text("Close") }
                 }
-                Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) { Text("+ Add food") }
-                Text("Foods you add are saved here with their label photo, so you only scan a label once. Tap one to edit it.", style = MaterialTheme.typography.bodySmall)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onAdd, modifier = Modifier.weight(1f)) { Text("+ Add food") }
+                    OutlinedButton(onClick = onAddGroup, modifier = Modifier.weight(1f)) { Text("+ New group") }
+                }
+                Text(
+                    "Foods you add are saved here with their label photo, so you only scan a label once. Tap one to edit it. " +
+                        "A group (a smoothie, pancakes) is several foods you log together.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 if (foods.isEmpty()) Text("Nothing saved yet.", style = MaterialTheme.typography.bodyMedium)
                 LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (groups.isNotEmpty()) {
+                        item { Text("Groups", style = MaterialTheme.typography.titleSmall) }
+                        items(groups, key = { "group-${it.id}" }) { group ->
+                            GroupCard(
+                                group = group,
+                                foods = foods,
+                                expanded = group.id in expandedGroups,
+                                onToggle = { expandedGroups = if (group.id in expandedGroups) expandedGroups - group.id else expandedGroups + group.id },
+                                onLog = { onLogGroup(group) },
+                                onEdit = { onEditGroup(group) },
+                                onDelete = { onDeleteGroup(group) }
+                            )
+                        }
+                        if (foods.isNotEmpty()) item { Text("Foods", style = MaterialTheme.typography.titleSmall) }
+                    }
                     items(foods, key = { it.id }) { food ->
                         OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                             FoodRow(

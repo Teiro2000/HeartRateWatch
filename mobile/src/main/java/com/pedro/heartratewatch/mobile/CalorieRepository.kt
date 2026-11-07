@@ -27,6 +27,7 @@ class CalorieRepository(private val context: Context) {
         val GOAL = intPreferencesKey("goal")
         val WEIGH_INS = stringPreferencesKey("weigh_ins")
         val PLAN = stringPreferencesKey("weight_plan")
+        val GROUPS = stringPreferencesKey("food_groups")
     }
 
     val entriesFlow: Flow<List<FoodEntry>> = context.calorieDataStore.data.map { prefs ->
@@ -36,6 +37,11 @@ class CalorieRepository(private val context: Context) {
     /** Saved foods, most recently added or used first. */
     val foodsFlow: Flow<List<Food>> = context.calorieDataStore.data.map { prefs ->
         prefs[Keys.FOODS]?.let(::parseFoods).orEmpty()
+    }
+
+    /** Groups of foods (recipes), most recently saved first. */
+    val groupsFlow: Flow<List<FoodGroup>> = context.calorieDataStore.data.map { prefs ->
+        prefs[Keys.GROUPS]?.let(::parseGroups).orEmpty()
     }
 
     /** The daily calorie goal, or null when none is set. */
@@ -141,12 +147,15 @@ class CalorieRepository(private val context: Context) {
         return saved
     }
 
-    /** Logs [amount] (in the food's own unit) of [food] on [epochDay], and moves the food to the top of "My foods". */
-    suspend fun log(food: Food, amount: Double, epochDay: Long) {
+    /**
+     * Logs [amount] (in the food's own unit) of [food] on [epochDay], and moves the food to the top of "My foods".
+     * With a [mealId] it becomes one more ingredient of that meal.
+     */
+    suspend fun log(food: Food, amount: Double, epochDay: Long, mealId: String? = null, mealName: String? = null) {
         context.calorieDataStore.edit { prefs ->
             val entries = prefs[Keys.ENTRIES]?.let(::parseEntries).orEmpty()
             prefs[Keys.ENTRIES] = entriesToJson(
-                entries + FoodEntry.of(newId(), food, amount, epochDay, System.currentTimeMillis())
+                entries + FoodEntry.of(newId(), food, amount, epochDay, System.currentTimeMillis(), mealId, mealName)
             )
             val foods = prefs[Keys.FOODS]?.let(::parseFoods).orEmpty()
             val used = foods.firstOrNull { it.id == food.id }
@@ -161,10 +170,58 @@ class CalorieRepository(private val context: Context) {
         }
     }
 
+    /** Changes what an entry is: the food it was (swap milk for water) and how much, keeping its day and meal. */
+    suspend fun updateEntry(entryId: String, food: Food, amount: Double) {
+        context.calorieDataStore.edit { prefs ->
+            val entries = prefs[Keys.ENTRIES]?.let(::parseEntries).orEmpty()
+            prefs[Keys.ENTRIES] = entriesToJson(entries.map {
+                if (it.id == entryId) FoodEntry.of(it.id, food, amount, it.epochDay, it.loggedAtMillis, it.mealId, it.mealName) else it
+            })
+        }
+    }
+
+    /** Removes everything logged as part of one meal. */
+    suspend fun deleteMeal(mealId: String) {
+        context.calorieDataStore.edit { prefs ->
+            val entries = prefs[Keys.ENTRIES]?.let(::parseEntries).orEmpty()
+            prefs[Keys.ENTRIES] = entriesToJson(entries.filterNot { it.mealId == mealId })
+        }
+    }
+
+    /** Saves [group], replacing the one with the same id (or the same name), or adds it at the top. */
+    suspend fun saveGroup(group: FoodGroup) {
+        context.calorieDataStore.edit { prefs ->
+            val groups = prefs[Keys.GROUPS]?.let(::parseGroups).orEmpty()
+            val replaced = if (groups.any { it.id == group.id }) groups.map { if (it.id == group.id) group else it } else listOf(group) + groups
+            prefs[Keys.GROUPS] = groupsToJson(replaced.filter { it.id == group.id || !it.name.equals(group.name, ignoreCase = true) })
+        }
+    }
+
+    suspend fun deleteGroup(id: String) {
+        context.calorieDataStore.edit { prefs ->
+            val groups = prefs[Keys.GROUPS]?.let(::parseGroups).orEmpty()
+            prefs[Keys.GROUPS] = groupsToJson(groups.filterNot { it.id == id })
+        }
+    }
+
+    /** Logs [scale] batches of [group] on [epochDay]: one entry per ingredient, together as one meal. */
+    suspend fun logGroup(group: FoodGroup, scale: Double, epochDay: Long) {
+        context.calorieDataStore.edit { prefs ->
+            val foods = prefs[Keys.FOODS]?.let(::parseFoods).orEmpty()
+            val entries = prefs[Keys.ENTRIES]?.let(::parseEntries).orEmpty()
+            val added = mealEntries(group, foods, scale, epochDay, newId(), System.currentTimeMillis(), ::newId)
+            prefs[Keys.ENTRIES] = entriesToJson(entries + added)
+        }
+    }
+
+    /** Removes a food; groups lose it as an ingredient, and what was logged stays. */
     suspend fun deleteFood(id: String) {
         context.calorieDataStore.edit { prefs ->
             val foods = prefs[Keys.FOODS]?.let(::parseFoods).orEmpty()
             prefs[Keys.FOODS] = foodsToJson(foods.filterNot { it.id == id })
+            prefs[Keys.GROUPS]?.let(::parseGroups)?.let { groups ->
+                prefs[Keys.GROUPS] = groupsToJson(groups.map { g -> g.copy(items = g.items.filterNot { it.foodId == id }) })
+            }
         }
         FoodPhotos.delete(context, id)
     }
@@ -176,7 +233,11 @@ class CalorieRepository(private val context: Context) {
                     .put("amount", e.amount).put("unit", e.unit.label)
                     .put("kcal", e.calories).put("protein", e.proteinG).put("carbs", e.carbsG).put("fat", e.fatG)
                     .put("at", e.loggedAtMillis)
-                    .also { o -> e.foodId?.let { o.put("food", it) } }
+                    .also { o ->
+                        e.foodId?.let { o.put("food", it) }
+                        e.mealId?.let { o.put("meal", it) }
+                        e.mealName?.let { o.put("mealName", it) }
+                    }
             )
         }
     }.toString()
@@ -196,7 +257,9 @@ class CalorieRepository(private val context: Context) {
                 carbsG = o.optDouble("carbs", 0.0),
                 fatG = o.optDouble("fat", 0.0),
                 loggedAtMillis = o.optLong("at", 0L),
-                foodId = o.optString("food").takeIf { it.isNotEmpty() }
+                foodId = o.optString("food").takeIf { it.isNotEmpty() },
+                mealId = o.optString("meal").takeIf { it.isNotEmpty() },
+                mealName = o.optString("mealName").takeIf { it.isNotEmpty() }
             )
         }
     }
@@ -225,6 +288,31 @@ class CalorieRepository(private val context: Context) {
                 servingAmount = o.optDouble("serving", 100.0).takeIf { it > 0 } ?: 100.0,
                 unit = ServingUnit.fromLabel(o.optString("unit", "g")),
                 photoAt = o.optLong("photo", 0L)
+            )
+        }
+    }
+
+    private fun groupsToJson(list: List<FoodGroup>): String = JSONArray().also { arr ->
+        list.forEach { g ->
+            arr.put(
+                JSONObject().put("id", g.id).put("name", g.name).put(
+                    "items",
+                    JSONArray().also { items -> g.items.forEach { items.put(JSONObject().put("food", it.foodId).put("amount", it.amount)) } }
+                )
+            )
+        }
+    }.toString()
+
+    private fun parseGroups(json: String): List<FoodGroup> = JSONArray(json).let { arr ->
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val items = o.getJSONArray("items")
+            FoodGroup(
+                id = o.getString("id"),
+                name = o.getString("name"),
+                items = (0 until items.length()).map { j ->
+                    items.getJSONObject(j).let { GroupItem(it.getString("food"), it.getDouble("amount")) }
+                }
             )
         }
     }

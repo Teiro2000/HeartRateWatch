@@ -35,7 +35,7 @@ data class Food(
  * Something eaten on one day. The numbers are the totals for what was eaten ([amount] of the food, worked out from its
  * per-serving numbers and serving size), kept so that deleting the saved food doesn't change the past. Editing the saved
  * food does rewrite them (see [withEditedFood]). [foodId] is the saved food it came from; entries logged before that was
- * kept have none and are matched by name.
+ * kept have none and are matched by name. Entries logged together from a [FoodGroup] share a [mealId] and [mealName].
  */
 data class FoodEntry(
     val id: String,
@@ -50,11 +50,16 @@ data class FoodEntry(
     val carbsG: Double,
     val fatG: Double,
     val loggedAtMillis: Long,
-    val foodId: String? = null
+    val foodId: String? = null,
+    val mealId: String? = null,
+    val mealName: String? = null
 ) {
     companion object {
         /** [amount] is in the food's own unit. */
-        fun of(id: String, food: Food, amount: Double, epochDay: Long, loggedAtMillis: Long): FoodEntry {
+        fun of(
+            id: String, food: Food, amount: Double, epochDay: Long, loggedAtMillis: Long,
+            mealId: String? = null, mealName: String? = null
+        ): FoodEntry {
             val per = amount / food.servingAmount
             return FoodEntry(
                 id = id,
@@ -67,11 +72,19 @@ data class FoodEntry(
                 carbsG = food.carbsG * per,
                 fatG = food.fatG * per,
                 loggedAtMillis = loggedAtMillis,
-                foodId = food.id
+                foodId = food.id.takeIf { it.isNotEmpty() },
+                mealId = mealId,
+                mealName = mealName
             )
         }
     }
 }
+
+/** The entry as a food of one serving (what was eaten), for adjusting an entry whose saved food has since been removed. */
+fun FoodEntry.asFood(): Food = Food(
+    id = foodId.orEmpty(), name = name, calories = calories, proteinG = proteinG, carbsG = carbsG, fatG = fatG,
+    servingAmount = amount.takeIf { it > 0 } ?: 100.0, unit = unit
+)
 
 /**
  * [entries] with the ones eaten from [food] worked out again from its edited numbers, name and unit (keeping how much was
@@ -82,16 +95,61 @@ fun withEditedFood(entries: List<FoodEntry>, food: Food, previousName: String, r
     entries.map { e ->
         val ofThisFood = e.foodId == food.id || (e.foodId != null && e.foodId in replacedIds) ||
             (e.foodId == null && e.name.equals(previousName, ignoreCase = true))
-        if (ofThisFood) FoodEntry.of(e.id, food, e.amount, e.epochDay, e.loggedAtMillis) else e
+        if (ofThisFood) FoodEntry.of(e.id, food, e.amount, e.epochDay, e.loggedAtMillis, e.mealId, e.mealName) else e
     }
+
+/** One ingredient of a [FoodGroup]: a saved food and how much of it goes into one batch, in that food's own unit. */
+data class GroupItem(val foodId: String, val amount: Double)
+
+/** A recipe or meal made of several saved foods ("Smoothie", "Pancakes"), logged all at once. */
+data class FoodGroup(val id: String, val name: String, val items: List<GroupItem>) {
+    /** What [scale] batches add up to; ingredients whose food was removed are left out. */
+    fun totals(foods: List<Food>, scale: Double = 1.0): DayTotals =
+        totalsOf(mealEntries(this, foods, scale, 0L, "", 0L) { "" })
+}
+
+/** The entries for eating [scale] batches of [group] as one meal: one per ingredient, all sharing [mealId]. */
+fun mealEntries(
+    group: FoodGroup, foods: List<Food>, scale: Double, epochDay: Long, mealId: String, loggedAtMillis: Long, newId: () -> String
+): List<FoodEntry> = group.items
+    .mapNotNull { item -> foods.firstOrNull { it.id == item.foodId }?.let { it to item.amount * scale } }
+    .mapIndexed { i, (food, amount) -> FoodEntry.of(newId(), food, amount, epochDay, loggedAtMillis + i, mealId, group.name) }
+
+/** What a day shows: a single food, or the ingredients logged together from a group. */
+sealed interface DayItem {
+    data class Single(val entry: FoodEntry) : DayItem
+    data class Meal(val id: String, val name: String, val entries: List<FoodEntry>) : DayItem
+}
+
+/** A day's entries in the order eaten, with entries logged together from a group gathered into one meal where the first appeared. */
+fun dayItems(entries: List<FoodEntry>): List<DayItem> {
+    val items = mutableListOf<DayItem>()
+    val mealAt = mutableMapOf<String, Int>()
+    for (entry in entries.sortedBy { it.loggedAtMillis }) {
+        val mealId = entry.mealId
+        if (mealId == null) {
+            items += DayItem.Single(entry)
+            continue
+        }
+        val at = mealAt[mealId]
+        if (at == null) {
+            mealAt[mealId] = items.size
+            items += DayItem.Meal(mealId, entry.mealName ?: entry.name, listOf(entry))
+        } else {
+            val meal = items[at] as DayItem.Meal
+            items[at] = meal.copy(entries = meal.entries + entry)
+        }
+    }
+    return items
+}
 
 /** What a day's food adds up to. */
 data class DayTotals(val calories: Double, val proteinG: Double, val carbsG: Double, val fatG: Double)
 
-fun dayTotals(entries: List<FoodEntry>, epochDay: Long): DayTotals {
-    val day = entries.filter { it.epochDay == epochDay }
-    return DayTotals(day.sumOf { it.calories }, day.sumOf { it.proteinG }, day.sumOf { it.carbsG }, day.sumOf { it.fatG })
-}
+fun totalsOf(entries: List<FoodEntry>): DayTotals =
+    DayTotals(entries.sumOf { it.calories }, entries.sumOf { it.proteinG }, entries.sumOf { it.carbsG }, entries.sumOf { it.fatG })
+
+fun dayTotals(entries: List<FoodEntry>, epochDay: Long): DayTotals = totalsOf(entries.filter { it.epochDay == epochDay })
 
 object CalorieChecks {
     /**

@@ -81,12 +81,6 @@ internal fun rememberCalorieTarget(repository: CalorieRepository): CalorieTarget
     }
 }
 
-private fun decimalOnly(text: String): String {
-    val filtered = text.filter { it.isDigit() || it == '.' }
-    val firstDot = filtered.indexOf('.')
-    return if (firstDot < 0) filtered else filtered.substring(0, firstDot + 1) + filtered.substring(firstDot + 1).replace(".", "")
-}
-
 private fun formatWeight(kg: Double, unit: WeightUnit): String = "${formatAmount(unit.fromKg(kg))} ${unit.symbol}"
 
 @Composable
