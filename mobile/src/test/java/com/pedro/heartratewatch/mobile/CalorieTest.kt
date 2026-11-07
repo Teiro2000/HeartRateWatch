@@ -182,6 +182,59 @@ class CalorieTest {
         assertEquals(unrelated, result[2])
     }
 
+    private val rolledOats = Food(id = "oats", name = "Oats", calories = 380.0, proteinG = 13.0, carbsG = 67.0, fatG = 7.0, servingAmount = 100.0)
+    private val milk = Food(id = "milk", name = "Milk", calories = 130.0, proteinG = 9.0, carbsG = 12.0, fatG = 5.0, servingAmount = 250.0, unit = ServingUnit.MILLILITRES)
+    private val water = Food(id = "water", name = "Water", calories = 0.0, servingAmount = 250.0, unit = ServingUnit.MILLILITRES)
+    private val porridge = FoodGroup("g1", "Porridge", listOf(GroupItem("oats", 50.0), GroupItem("milk", 250.0), GroupItem("gone", 10.0)))
+
+    @Test
+    fun aGroupAddsUpItsIngredientsAndSkipsRemovedFoods() {
+        val one = porridge.totals(listOf(rolledOats, milk))
+        assertEquals(190.0 + 130.0, one.calories, 0.001)
+        assertEquals(6.5 + 9.0, one.proteinG, 0.001)
+        assertEquals((190.0 + 130.0) * 2, porridge.totals(listOf(rolledOats, milk), scale = 2.0).calories, 0.001)
+    }
+
+    @Test
+    fun loggingAGroupMakesOneEntryPerIngredientSharingAMeal() {
+        var n = 0
+        val entries = mealEntries(porridge, listOf(rolledOats, milk), 1.5, 100, "m1", 1000L) { "id${n++}" }
+        assertEquals(2, entries.size)
+        assertEquals(listOf("Oats", "Milk"), entries.map { it.name })
+        assertEquals(75.0, entries[0].amount, 0.001)
+        assertEquals(375.0, entries[1].amount, 0.001)
+        assertTrue(entries.all { it.mealId == "m1" && it.mealName == "Porridge" && it.epochDay == 100L })
+        assertTrue(entries[0].loggedAtMillis < entries[1].loggedAtMillis)
+    }
+
+    @Test
+    fun aDayGathersAMealsEntriesWhereItFirstAppears() {
+        var n = 0
+        val meal = mealEntries(porridge, listOf(rolledOats, milk), 1.0, 100, "m1", 1000L) { "id${n++}" }
+        val coffee = FoodEntry.of("c", water, 250.0, 100, 500L)
+        val later = FoodEntry.of("x", rolledOats, 10.0, 100, 5000L, "m1", "Porridge") // an ingredient added afterwards
+        val items = dayItems(listOf(later) + meal + coffee)
+        assertEquals(2, items.size)
+        assertEquals(coffee, (items[0] as DayItem.Single).entry)
+        val shown = items[1] as DayItem.Meal
+        assertEquals("Porridge", shown.name)
+        assertEquals(listOf("id0", "id1", "x"), shown.entries.map { it.id })
+    }
+
+    @Test
+    fun swappingAnIngredientKeepsItInTheMeal() {
+        var n = 0
+        val milkEntry = mealEntries(porridge, listOf(rolledOats, milk), 1.0, 100, "m1", 1000L) { "id${n++}" }[1]
+        val swapped = FoodEntry.of(milkEntry.id, water, 250.0, milkEntry.epochDay, milkEntry.loggedAtMillis, milkEntry.mealId, milkEntry.mealName)
+        assertEquals(0.0, swapped.calories, 0.0)
+        assertEquals("Water", swapped.name)
+        assertEquals("m1", swapped.mealId)
+        // editing the saved food later keeps the meal too
+        val edited = withEditedFood(listOf(milkEntry), milk.copy(calories = 100.0), "Milk")
+        assertEquals("m1", edited[0].mealId)
+        assertEquals(100.0, edited[0].calories, 0.001)
+    }
+
     @Test
     fun renamingAFoodRenamesItsEntries() {
         val old = Food(id = "f1", name = "Chiken", calories = 170.0, servingAmount = 69.0)
